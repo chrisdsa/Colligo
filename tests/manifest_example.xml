@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<manifest>
+    <!-- Project's dependencies -->
+    <default revision="main" uri="gitlab.com"/>
+
+    <!-- A Section -->
+    <!-- path is relative to the manifest file -->
+    <project name="cdsa_rust/manifest" path="./dev" revision="dev"/>
+    <project name="cdsa_rust/manifest" path="release/v0" revision="v0.0.0"/>
+
+    <!-- B Section -->
+    <!-- src path is relative to the manifest file -->
+    <!-- dest path is relative to the project path -->
+    <project uri="gitlab.com" name="cdsa_rust/manifest" path="./no_revision">
+        <linkfile src="./README.md" dest="./new_folder/ln_README.md"/>
+        <copyfile src="./README.md" dest="./cp_README.md"/>
+    </project>
+
+</manifest>

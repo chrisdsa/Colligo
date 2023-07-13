@@ -1,0 +1,77 @@
+image: chrisdsa/rust:1.68-0.1.0
+
+stages:
+  - test
+  - linter
+  - static analysis
+  - release
+
+linter:
+  stage: linter
+  script:
+    - cargo fmt --all --check
+  only:
+    - merge_requests
+
+clippy:
+  stage: static analysis
+  script:
+    - cargo clippy -- -Dwarnings
+  only:
+    - merge_requests
+
+test:
+  stage: test
+  script:
+    - cargo test --all
+  only:
+    - merge_requests
+
+executable_linux_x86_64:
+  stage: release
+  script:
+    - 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+    - cargo build --target x86_64-unknown-linux-gnu --release
+    - mkdir linux_x86_64
+    - mv target/x86_64-unknown-linux-gnu/release/manifest linux_x86_64/manifest
+  artifacts:
+    name: manifest
+    paths:
+      - linux_x86_64
+    expire_in: 1 days
+  only:
+    - /^v\d+\.\d+\.\d+(-rc\d+)?$/
+
+executable_windows_x86_64_gnu:
+  image: chrisdsa/rust_mingw:1.68-0.1.0
+  stage: release
+  script:
+    - 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+    - cargo build --target x86_64-pc-windows-gnu --release
+    - mkdir win_x86_64
+    - mv target/x86_64-pc-windows-gnu/release/manifest.exe win_x86_64/manifest.exe
+  artifacts:
+    name: manifest
+    paths:
+      - win_x86_64
+    expire_in: 1 days
+  only:
+    - /^v\d+\.\d+\.\d+(-rc\d+)?$/
+
+test_executable_linux_x86_64:
+  image: ubuntu:20.04
+  stage: release
+  needs:
+    - job: executable_linux_x86_64
+      artifacts: true
+  script:
+    - apt update && apt install -y git
+    - export PATH=./linux_x86_64:$PATH
+    - 'echo "<?xml version=\"1.0\" encoding=\"UTF-8\" ?><manifest><default revision=\"main\" uri=\"gitlab.com\"/><project name=\"cdsa_rust/manifest\" path=\"./dev\" revision=\"dev\"/><project name=\"cdsa_rust/manifest\" path=\"release/v0\" revision=\"v0.0.0\"/><project uri=\"gitlab.com\" name=\"cdsa_rust/manifest\" path=\"./no_revision\"><linkfile src=\"./README.md\" dest=\"./ln_README.md\"/><copyfile src=\"./README.md\" dest=\"./cp_README.md\"/></project></manifest>" > manifest.xml'
+    - manifest --version
+    - manifest --help
+    - manifest --sync --https
+  dependencies:
+    - executable_linux_x86_64
+  only:
+    - /^v\d+\.\d+\.\d+(-rc\d+)?$/
