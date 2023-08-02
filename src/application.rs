@@ -31,8 +31,6 @@ pub const PIN: &str = "pin";
 pub const LIGHT: &str = "light";
 pub const HTTPS: &str = "https";
 
-pub const VERSION: &str = "version";
-
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum ExitCode {

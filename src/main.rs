@@ -1,7 +1,7 @@
 use clap::{Arg, ArgAction, Command};
 use manifest::application::{
     assert_dependencies, generate_default_manifest, save_file, DwlMode, ExitCode, ManifestInstance,
-    APP_NAME, GENERATE_MANIFEST, HTTPS, MANIFEST_INPUT, PIN, SYNC, VERSION,
+    APP_NAME, GENERATE_MANIFEST, HTTPS, MANIFEST_INPUT, PIN, SYNC,
 };
 use manifest::git_version_control::GitVersionControl;
 use manifest::version::APP_VERSION;
@@ -58,12 +58,6 @@ fn main() -> Result<(), ExitCode> {
         .value_name("FILE")
         .help("Manifest file with pinned revisions");
 
-    // Version option
-    let version = Arg::new(VERSION)
-        .long(VERSION)
-        .action(ArgAction::SetTrue)
-        .help("Program version");
-
     // Debug option
     let debug = Arg::new(DEBUG_OPTION)
         .long(DEBUG_OPTION)
@@ -78,7 +72,6 @@ fn main() -> Result<(), ExitCode> {
         .arg(sync)
         .arg(https)
         .arg(pin)
-        .arg(version)
         .arg(debug)
         .arg_required_else_help(true)
         .version(APP_VERSION)
