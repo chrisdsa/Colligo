@@ -10,22 +10,16 @@ linter:
   stage: linter
   script:
     - cargo fmt --all --check
-  only:
-    - merge_requests
 
 clippy:
   stage: static analysis
   script:
     - cargo clippy -- -Dwarnings
-  only:
-    - merge_requests
 
 test:
   stage: test
   script:
     - cargo test --all
-  only:
-    - merge_requests
 
 executable_linux_x86_64:
   stage: release
@@ -71,7 +65,25 @@ test_executable_linux_x86_64:
     - manifest --version
     - manifest --help
     - manifest --sync --https
-  dependencies:
-    - executable_linux_x86_64
   only:
     - /^v\d+\.\d+\.\d+(-rc\d+)?$/
+
+release-artifacts:
+  # Use this job to specify artifacts that should never expire for tag pipelines.
+  stage: release
+  needs:
+    - job: executable_windows_x86_64_gnu
+      artifacts: true
+    - job: executable_linux_x86_64
+      artifacts: true
+    - job: test_executable_linux_x86_64
+      artifacts: false
+  script:
+    - echo "Persisting artifacts for tag pipelines"
+  artifacts:
+    paths:
+      - win_x86_64
+      - linux_x86_64
+    expire_in: never
+  only:
+    - /^v\d+\.\d+\.\d+$/

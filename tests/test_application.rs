@@ -86,6 +86,7 @@ mod test_application {
         const PROJECT_2_PATH: &str = "/tmp/manifest_test_empty_dir/no_revision";
         const COMMIT_V0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
         const REF_DEV: &str = "refs/heads/dev";
+        const REF_MAIN: &str = "refs/heads/main";
 
         let repo_0 = Repository::open(PROJECT_0_PATH).expect("Unable to open project 0 repository");
         let repo_1 = Repository::open(PROJECT_1_PATH).expect("Unable to open project 1 repository");
@@ -106,14 +107,8 @@ mod test_application {
             COMMIT_V0
         );
         assert_eq!(
-            repo_2
-                .head()
-                .expect("Unable to get head")
-                .peel_to_commit()
-                .unwrap()
-                .id()
-                .to_string(),
-            COMMIT_V0
+            repo_2.head().expect("Unable to get head").name().unwrap(),
+            REF_MAIN
         );
 
         // Assert linkfile and copyfile
@@ -189,6 +184,7 @@ mod test_application {
         // Assert
         const COMMIT_V0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
         const REF_DEV: &str = "refs/heads/dev";
+        const REF_MAIN: &str = "refs/heads/main";
 
         let repo_0 = Repository::open(PROJECT_0_PATH).expect("Unable to open project 0 repository");
         let repo_1 = Repository::open(PROJECT_1_PATH).expect("Unable to open project 1 repository");
@@ -209,14 +205,8 @@ mod test_application {
             COMMIT_V0
         );
         assert_eq!(
-            repo_2
-                .head()
-                .expect("Unable to get head")
-                .peel_to_commit()
-                .unwrap()
-                .id()
-                .to_string(),
-            COMMIT_V0
+            repo_2.head().expect("Unable to get head").name().unwrap(),
+            REF_MAIN
         );
 
         // Assert linkfile and copyfile
