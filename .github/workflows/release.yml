@@ -1,0 +1,73 @@
+name: Release
+run-name: Release
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  create_linux_executable:
+    runs-on: ubuntu-latest
+    container: chrisdsa/rust:1.68-0.1.0
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set version
+        run: 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+      - name: Build
+        run: cargo build --target x86_64-unknown-linux-gnu --release
+      - name: Create artifact
+        run: mkdir linux_x86_64 && mv target/x86_64-unknown-linux-gnu/release/manifest linux_x86_64/manifest
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: release_linux_${{ github.ref_name }}
+          path: linux_x86_64
+          retention-days: 1
+
+
+  create_windows_executable:
+    runs-on: ubuntu-latest
+    container: chrisdsa/rust_mingw:1.68-0.1.0
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set version
+        run: 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+      - name: Build
+        run: cargo build --target x86_64-pc-windows-gnu --release
+      - name: Create artifact
+        run: mkdir win_x86_64 && mv target/x86_64-pc-windows-gnu/release/manifest.exe win_x86_64/manifest.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: release_windows_${{ github.ref_name }}
+          path: win_x86_64
+          retention-days: 1
+
+  create_release:
+    runs-on: ubuntu-latest
+    needs:
+      - create_linux_executable
+      - create_windows_executable
+    steps:
+      - name: Download linux artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: release_linux_${{ github.ref_name }}
+          path: linux_x86_64
+      - name: Download windows artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: release_windows_${{ github.ref_name }}
+          path: win_x86_64
+      - name: zip artifacts
+        run: zip -r linux_x86_64.zip linux_x86_64 && zip -r win_x86_64.zip win_x86_64
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            linux_x86_64.zip
+            win_x86_64.zip
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
