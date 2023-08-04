@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod test_git_version_control {
 
+    use colligo::application::{DwlMode, VersionControl};
+    use colligo::git_version_control::GitVersionControl;
+    use colligo::project::Project;
     use git2::Repository;
-    use manifest::application::{DwlMode, VersionControl};
-    use manifest::git_version_control::GitVersionControl;
-    use manifest::project::Project;
 
     #[test]
     fn clone_project_ssh() {

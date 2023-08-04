@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod test_xml_parser {
 
-    use manifest::application::ManifestParser;
-    use manifest::project::{ProjectAction, ProjectFileAction};
-    use manifest::xml_parser::XmlParser;
+    use colligo::application::ManifestParser;
+    use colligo::project::{ProjectAction, ProjectFileAction};
+    use colligo::xml_parser::XmlParser;
 
     #[test]
     fn parse_valid_xml() {

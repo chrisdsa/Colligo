@@ -53,7 +53,7 @@ mod test_xml {
 #[cfg(test)]
 mod test_manifest {
 
-    use manifest::project::Project;
+    use colligo::project::Project;
 
     #[test]
     fn test_project_instance() {

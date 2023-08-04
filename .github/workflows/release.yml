@@ -18,7 +18,7 @@ jobs:
       - name: Build
         run: cargo build --target x86_64-unknown-linux-gnu --release
       - name: Create artifact
-        run: mkdir linux_x86_64 && mv target/x86_64-unknown-linux-gnu/release/manifest linux_x86_64/manifest
+        run: mkdir linux_x86_64 && mv target/x86_64-unknown-linux-gnu/release/colligo linux_x86_64/colligo
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
@@ -39,7 +39,7 @@ jobs:
       - name: Build
         run: cargo build --target x86_64-pc-windows-gnu --release
       - name: Create artifact
-        run: mkdir win_x86_64 && mv target/x86_64-pc-windows-gnu/release/manifest.exe win_x86_64/manifest.exe
+        run: mkdir win_x86_64 && mv target/x86_64-pc-windows-gnu/release/colligo.exe win_x86_64/colligo.exe
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:

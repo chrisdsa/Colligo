@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod test_application {
 
-    use git2::Repository;
-    use manifest::application::{
+    use colligo::application::{
         generate_default_manifest, DwlMode, ExitCode, ManifestInstance, ManifestParser,
     };
-    use manifest::default_manifest::DEFAULT_MANIFEST_FILE;
-    use manifest::git_version_control::GitVersionControl;
-    use manifest::xml_parser::XmlParser;
+    use colligo::default_manifest::DEFAULT_MANIFEST_FILE;
+    use colligo::git_version_control::GitVersionControl;
+    use colligo::xml_parser::XmlParser;
+    use git2::Repository;
 
     #[cfg(target_os = "linux")]
     use std::os::unix::fs::symlink;

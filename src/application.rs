@@ -17,7 +17,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::symlink_file as symlink;
 
 // Application description
-pub const APP_NAME: &str = "Manifest";
+pub const APP_NAME: &str = "Colligo";
 
 // Command line arguments
 pub const GENERATE_MANIFEST: &str = "generate";

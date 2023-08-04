@@ -1,4 +1,4 @@
-# manifest
+# Colligo
 
 Manage the project's source dependencies by having an XML file describing where to clone / update git repositories to a
 specific revision / branch / commit.
@@ -8,11 +8,11 @@ specific revision / branch / commit.
 ### Create a manifest
 
 Create a manifest file named `manifest.xml` in the root of the project. You can use the
-`manifest --generate manifest.xml` command to generate a manifest with the file format and comments describing the
+`colligo --generate manifest.xml` command to generate a manifest with the file format and comments describing the
 different options.
 
 ```bash
-manifest --generate manifest.xml
+colligo --generate manifest.xml
 ```
 
 ### Clone / Update repositories
@@ -22,7 +22,7 @@ the `--sync` option. The `--https` option can be used to use HTTPS instead of SS
 default name for the manifest is `manifest.xml`, but you can specify a different name with the `--input` option.
 
 ```bash
-manifest --sync [--input your_manifest.xml] [--https]
+colligo --sync [--input your_manifest.xml] [--https]
 ```
 
 ### Pin manifest to current commit id
@@ -33,7 +33,7 @@ default `manifest.xml` or the one provided by `--input`) and change the revision
 the new manifest to the file specified by `--pin`.
 
 ```bash
-manifest --pin pinned_manifest.xml [--input your_manifest.xml]
+colligo --pin pinned_manifest.xml [--input your_manifest.xml]
 ```
 
 ## Motivation

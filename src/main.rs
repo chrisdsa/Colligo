@@ -1,11 +1,11 @@
 use clap::{Arg, ArgAction, Command};
-use manifest::application::{
+use colligo::application::{
     assert_dependencies, generate_default_manifest, save_file, DwlMode, ExitCode, ManifestInstance,
     APP_NAME, GENERATE_MANIFEST, HTTPS, MANIFEST_INPUT, PIN, SYNC,
 };
-use manifest::git_version_control::GitVersionControl;
-use manifest::version::APP_VERSION;
-use manifest::xml_parser::XmlParser;
+use colligo::git_version_control::GitVersionControl;
+use colligo::version::APP_VERSION;
+use colligo::xml_parser::XmlParser;
 use simple_logger::SimpleLogger;
 
 const DEBUG_OPTION: &str = "debug";
