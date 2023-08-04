@@ -11,8 +11,10 @@ jobs:
     container: chrisdsa/rust:1.68-0.1.0
     steps:
       - uses: actions/checkout@v3
+      - name: Add SHORT_SHA env property with commit short sha
+        run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-7`" >> $GITHUB_ENV
       - name: Set version
-        run: 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+        run: 'echo "pub const APP_VERSION: &str = \"${{ github.ref_name }}-${SHORT_SHA}\";" > src/version.rs'
       - name: Build
         run: cargo build --target x86_64-unknown-linux-gnu --release
       - name: Create artifact
@@ -30,8 +32,10 @@ jobs:
     container: chrisdsa/rust_mingw:1.68-0.1.0
     steps:
       - uses: actions/checkout@v3
+      - name: Add SHORT_SHA env property with commit short sha
+        run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-7`" >> $GITHUB_ENV
       - name: Set version
-        run: 'echo "pub const APP_VERSION: &str = \"$CI_COMMIT_TAG-$CI_COMMIT_SHORT_SHA\";" > src/version.rs'
+        run: 'echo "pub const APP_VERSION: &str = \"${{ github.ref_name }}-${SHORT_SHA}\";" > src/version.rs'
       - name: Build
         run: cargo build --target x86_64-pc-windows-gnu --release
       - name: Create artifact
