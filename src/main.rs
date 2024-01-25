@@ -1,7 +1,7 @@
 use clap::{Arg, ArgAction, Command};
 use colligo::application::{
-    assert_dependencies, generate_default_manifest, save_file, DwlMode, ExitCode, ManifestInstance,
-    APP_NAME, GENERATE_MANIFEST, HTTPS, MANIFEST_INPUT, PIN, SYNC,
+    assert_dependencies, generate_default_manifest, save_file, DwlMode, ManifestInstance, APP_NAME,
+    FORCE, GENERATE_MANIFEST, HTTPS, LIGHT, MANIFEST_INPUT, PIN, QUIET, SYNC,
 };
 use colligo::git_version_control::GitVersionControl;
 use colligo::version::APP_VERSION;
@@ -10,7 +10,7 @@ use simple_logger::SimpleLogger;
 
 const DEBUG_OPTION: &str = "debug";
 
-fn main() -> Result<(), ExitCode> {
+fn main() {
     // Generate manifest option
     let generate_manifest = Arg::new(GENERATE_MANIFEST)
         .long(GENERATE_MANIFEST)
@@ -39,7 +39,6 @@ fn main() -> Result<(), ExitCode> {
         .help("Use HTTPS instead of SSH");
 
     // Light option
-    /* TODO: implement light option
     let light = Arg::new(LIGHT)
         .long(LIGHT)
         .action(ArgAction::SetTrue)
@@ -49,7 +48,20 @@ fn main() -> Result<(), ExitCode> {
         This option is useful for CI and build servers. \
         All revision MUST point to a branch or a tag, commit ID are not supported.",
         );
-     */
+
+    // Quiet option
+    let quiet = Arg::new(QUIET)
+        .long(QUIET)
+        .action(ArgAction::SetTrue)
+        .default_value("false")
+        .help("Do not print any output, expect for errors.");
+
+    // Force option
+    let force = Arg::new(FORCE)
+        .long(FORCE)
+        .action(ArgAction::SetTrue)
+        .default_value("false")
+        .help("Discard local changes and overwrite them with the remote version.");
 
     // Pin option
     let pin = Arg::new(PIN)
@@ -70,7 +82,10 @@ fn main() -> Result<(), ExitCode> {
         .arg(generate_manifest)
         .arg(manifest_input)
         .arg(sync)
+        .arg(light)
         .arg(https)
+        .arg(quiet)
+        .arg(force)
         .arg(pin)
         .arg(debug)
         .arg_required_else_help(true)
@@ -88,25 +103,47 @@ fn main() -> Result<(), ExitCode> {
         .init()
         .expect("Failed to initialize logger");
 
+    let quiet = *matches.get_one::<bool>(QUIET).unwrap_or(&false);
+
+    let force = *matches.get_one::<bool>(FORCE).unwrap_or(&false);
+
     // Generate manifest
     if let Some(path) = matches.get_one::<String>(GENERATE_MANIFEST) {
-        println!("Generate manifest file: {}", path);
-        generate_default_manifest(path)?;
-        return Ok(());
+        conditional_println(quiet, format!("Generate manifest file: {}", path));
+        if let Err(error_msg) = generate_default_manifest(path) {
+            eprintln!("{}", error_msg);
+            std::process::exit(1);
+        }
+        return;
     }
 
     // Following options needs git to be installed on the system
-    assert_dependencies()?;
+    if let Err(error_msg) = assert_dependencies() {
+        eprintln!("{}", error_msg);
+        std::process::exit(1);
+    }
 
     // All following commands require a manifest file
     // Manifest input
     let manifest_path = matches.get_one::<String>(MANIFEST_INPUT);
-    let mut manifest = ManifestInstance::new(manifest_path)?;
+    let mut manifest = match ManifestInstance::new(manifest_path) {
+        Ok(manifest) => manifest,
+        Err(error_msg) => {
+            eprintln!("{}", error_msg);
+            std::process::exit(1);
+        }
+    };
 
     // Parse manifest file. Currently only support XML format.
     let xml_parser = XmlParser::new();
-    println!("Parsing manifest file: {}", manifest.get_filename());
-    manifest.parse(&xml_parser)?;
+    conditional_println(
+        quiet,
+        format!("Parsing manifest file: {}", manifest.get_filename()),
+    );
+    if let Err(error_msg) = manifest.parse(&xml_parser) {
+        eprintln!("{}", error_msg);
+        std::process::exit(1);
+    }
 
     // Download mode
     let dwl_mode = match matches.get_one::<bool>(HTTPS) {
@@ -119,16 +156,36 @@ fn main() -> Result<(), ExitCode> {
 
     // Synchronize all projects
     if let Some(true) = matches.get_one::<bool>(SYNC) {
-        println!("Synchronize all projects");
-        manifest.sync(&vcs, &dwl_mode)?;
+        let light = *matches.get_one::<bool>(LIGHT).unwrap_or(&false);
+
+        conditional_println(quiet, "Synchronize all projects".to_string());
+        if let Err(error_msg) = manifest.sync(&vcs, &dwl_mode, light, quiet, force) {
+            eprintln!("{}", error_msg);
+            std::process::exit(1);
+        }
+        conditional_println(quiet, "Synchronization complete".to_string());
     }
 
     // Pin manifest
     if let Some(path) = matches.get_one::<String>(PIN) {
-        println!("Pin manifest");
-        let pinned = manifest.pin(&vcs, &xml_parser)?;
-        save_file(path, pinned.get_file())?;
-    }
+        conditional_println(quiet, "Pin manifest".to_string());
+        let pinned = match manifest.pin(&vcs, &xml_parser) {
+            Ok(pinned) => pinned,
+            Err(error_msg) => {
+                eprintln!("{}", error_msg);
+                std::process::exit(1);
+            }
+        };
 
-    Ok(())
+        if let Err(error_msg) = save_file(path, pinned.get_file()) {
+            eprintln!("{}", error_msg);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn conditional_println(quiet: bool, message: String) {
+    if !quiet {
+        println!("{}", message);
+    }
 }

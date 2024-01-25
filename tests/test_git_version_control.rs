@@ -21,8 +21,8 @@ mod test_git_version_control {
         );
 
         let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
-        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS);
-        let _ = git.checkout(CURRENT_DIR, &project);
+        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, false);
+        let _ = git.checkout(CURRENT_DIR, &project, None, false);
 
         assert!(result.is_ok());
         let repo = Repository::open(PROJECT_PATH).expect("Unable to open repository");
@@ -47,7 +47,7 @@ mod test_git_version_control {
         );
 
         let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
-        let result = git.clone_lightweight(CURRENT_DIR, &project, &DwlMode::HTTPS);
+        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, true);
 
         assert!(result.is_ok());
         let repo = Repository::open(PROJECT_PATH).expect("Unable to open repository");

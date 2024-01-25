@@ -1,6 +1,6 @@
-use crate::application::{ExitCode, ManifestParser};
+use crate::application::ManifestParser;
 use crate::project::{Project, ProjectAction, ProjectFileAction, DEFAULT_HOST, DEFAULT_REVISION};
-use log::{error, warn};
+use log::warn;
 use roxmltree::{Document, Node};
 
 const XML_HEADER: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
@@ -47,7 +47,7 @@ impl Default for XmlParser {
 }
 
 impl ManifestParser for XmlParser {
-    fn parse(&self, file: &str) -> Result<Vec<Project>, ExitCode> {
+    fn parse(&self, file: &str) -> Result<Vec<Project>, String> {
         let mut projects: Vec<Project> = Vec::new();
 
         let parsed_xml = parse_xml_file(file)?;
@@ -72,7 +72,7 @@ impl ManifestParser for XmlParser {
         Ok(projects)
     }
 
-    fn compose(&self, projects: &[Project]) -> Result<String, ExitCode> {
+    fn compose(&self, projects: &[Project]) -> Result<String, String> {
         let mut xml = String::new();
         xml.push_str(XML_HEADER);
         xml.push_str(ROOT_BEGIN);
@@ -86,7 +86,7 @@ impl ManifestParser for XmlParser {
     }
 }
 
-fn parse_xml_file(file: &str) -> Result<Document, ExitCode> {
+fn parse_xml_file(file: &str) -> Result<Document, String> {
     let xml = Document::parse(file);
     let parsed_xml;
     match xml {
@@ -94,30 +94,21 @@ fn parse_xml_file(file: &str) -> Result<Document, ExitCode> {
             parsed_xml = xml.unwrap();
             Ok(parsed_xml)
         }
-        Err(_) => {
-            error!("Unable to parse XML");
-            Err(ExitCode::ManifestInvalid)
-        }
+        Err(_) => Err("Unable to parse XML".to_string()),
     }
 }
 
-fn get_name(node: &Node) -> Result<String, ExitCode> {
+fn get_name(node: &Node) -> Result<String, String> {
     match node.attribute("name") {
         Some(value) => Ok(value.to_string()),
-        None => {
-            error!("<project --> name= <-- /> is missing");
-            Err(ExitCode::ManifestInvalid)
-        }
+        None => Err("<project --> name= <-- /> is missing".to_string()),
     }
 }
 
-fn get_path(node: &Node) -> Result<String, ExitCode> {
+fn get_path(node: &Node) -> Result<String, String> {
     match node.attribute("path") {
         Some(value) => Ok(value.to_string()),
-        None => {
-            error!("<project --> path= <-- /> is missing");
-            Err(ExitCode::ManifestInvalid)
-        }
+        None => Err("<project --> path= <-- /> is missing".to_string()),
     }
 }
 
@@ -131,7 +122,7 @@ fn get_uri(node: &Node, default: &DefaultParameters) -> String {
     node.attribute("uri").unwrap_or(&default.uri).to_string()
 }
 
-fn add_actions(instance: &mut Project, node: &Node) -> Result<(), ExitCode> {
+fn add_actions(instance: &mut Project, node: &Node) -> Result<(), String> {
     if let Some(child) = node.first_element_child() {
         for action in child.next_siblings().filter(|n| n.is_element()) {
             let action_name = action.tag_name().name().to_string();
@@ -142,14 +133,16 @@ fn add_actions(instance: &mut Project, node: &Node) -> Result<(), ExitCode> {
                     let dest = action.attribute("dest").unwrap().to_string();
                     instance.add_file_action(&action_name, src, dest);
                 } else {
-                    error!("<[linkfile or copyfile] /> is missing src or dest");
-                    return Err(ExitCode::ManifestInvalid);
+                    return Err("<[linkfile or copyfile] /> is missing src or dest".to_string());
                 }
+            } else if instance.is_delete_project(&action_name) {
+                instance.add_delete_project();
             } else {
                 warn!("Warning: <{action_name} /> is not a valid action. Ignored")
             }
         }
     }
+    instance.sort_actions();
     Ok(())
 }
 
@@ -177,19 +170,15 @@ fn project_to_xml(project: &Project) -> String {
         for action in project.get_actions() {
             let action_xml = match action {
                 ProjectAction::FileAction(ProjectFileAction::LinkFile(src, dest)) => {
-                    format!(
-                        "        <linkfile src=\"{src}\" dest=\"{dest}\"/>\n",
-                        src = src,
-                        dest = dest
-                    )
+                    format!("        <linkfile src=\"{src}\" dest=\"{dest}\"/>\n",)
                 }
                 ProjectAction::FileAction(ProjectFileAction::CopyFile(src, dest)) => {
-                    format!(
-                        "        <copyfile src=\"{src}\" dest=\"{dest}\"/>\n",
-                        src = src,
-                        dest = dest
-                    )
+                    format!("        <copyfile src=\"{src}\" dest=\"{dest}\"/>\n",)
                 }
+                ProjectAction::FileAction(ProjectFileAction::CopyDir(src, dest)) => {
+                    format!("        <copydir src=\"{src}\" dest=\"{dest}\"/>\n",)
+                }
+                ProjectAction::DeleteProject => "        <delete-project/>\n".to_string(),
             };
             xml.push_str(&action_xml);
         }

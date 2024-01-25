@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod test_application {
-
     use colligo::application::{
-        generate_default_manifest, DwlMode, ExitCode, ManifestInstance, ManifestParser,
+        generate_default_manifest, DwlMode, ManifestInstance, ManifestParser,
     };
     use colligo::default_manifest::DEFAULT_MANIFEST_FILE;
     use colligo::git_version_control::GitVersionControl;
@@ -12,7 +11,7 @@ mod test_application {
     #[cfg(target_os = "linux")]
     use std::os::unix::fs::symlink;
 
-    static HTTPS_URL: &str = "https://gitlab.com/cdsa_rust/manifest.git";
+    static HTTPS_URL: &str = "https://gitlab.com/cdsa_rust/colligo.git";
 
     #[test]
     fn generate_default_xml_valid_destination() {
@@ -41,7 +40,7 @@ mod test_application {
         let manifest = ManifestInstance::new(Some(&MANIFEST_PATH.to_string()));
 
         match manifest {
-            Err(ExitCode::NoManifest) => { /* Ok */ }
+            Err(_) => { /* Ok */ }
             _ => panic!("Expected ExitCode::ManifestInvalid"),
         }
     }
@@ -77,7 +76,7 @@ mod test_application {
 
         let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
         manifest
-            .sync(git.as_ref(), &DwlMode::HTTPS)
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
             .expect("Unable to sync manifest");
 
         // Assert
@@ -178,7 +177,7 @@ mod test_application {
 
         let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
         manifest
-            .sync(git.as_ref(), &DwlMode::HTTPS)
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
             .expect("Unable to sync manifest");
 
         // Assert
@@ -283,6 +282,224 @@ mod test_application {
         assert_eq!(pinned.get_projects()[0].get_revision(), COMMIT_V0);
         assert_eq!(pinned.get_projects()[1].get_revision(), COMMIT_V0);
         assert_eq!(pinned.get_projects()[2].get_revision(), COMMIT_V0);
+
+        // Cleanup
+        std::fs::remove_dir_all(TEST_PATH).unwrap();
+    }
+
+    #[test]
+    fn sync_with_force_option() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
+        const TEST_PATH: &str = "/tmp/manifest_test_force_sync";
+        const TEST_MANIFEST_PATH: &str = "/tmp/manifest_test_force_sync/manifest_example.xml";
+        std::fs::create_dir_all(TEST_PATH).unwrap();
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, TEST_MANIFEST_PATH).unwrap();
+
+        let mut manifest = ManifestInstance::new(Some(&TEST_MANIFEST_PATH.to_string()))
+            .expect("Unable to get manifest file");
+
+        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
+        manifest
+            .parse(parser.as_ref())
+            .expect("Unable to parse manifest");
+
+        let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
+            .expect("Unable to sync manifest");
+
+        // Save current README in dev/
+        let original_readme = std::fs::read_to_string(format!("{}/dev/README.md", TEST_PATH))
+            .expect("Unable to read README");
+
+        // Modify the README in dev/
+        std::fs::write(
+            format!("{}/dev/README.md", TEST_PATH),
+            "This is a new README",
+        )
+        .expect("Unable to modify README");
+
+        // Sync again with force option
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, true)
+            .expect("Unable to sync manifest");
+
+        // Assert: README in dev/ should be the same as the original README
+        assert_eq!(
+            std::fs::read_to_string(format!("{}/dev/README.md", TEST_PATH))
+                .expect("Unable to read README"),
+            original_readme
+        );
+
+        // Cleanup
+        std::fs::remove_dir_all(TEST_PATH).unwrap();
+    }
+
+    #[test]
+    fn sync_when_source_are_modified() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
+        const TEST_PATH: &str = "/tmp/manifest_test_sync_modified_source";
+        const TEST_MANIFEST_PATH: &str =
+            "/tmp/manifest_test_sync_modified_source/manifest_example.xml";
+        std::fs::create_dir_all(TEST_PATH).unwrap();
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, TEST_MANIFEST_PATH).unwrap();
+
+        let mut manifest = ManifestInstance::new(Some(&TEST_MANIFEST_PATH.to_string()))
+            .expect("Unable to get manifest file");
+
+        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
+        manifest
+            .parse(parser.as_ref())
+            .expect("Unable to parse manifest");
+
+        let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
+            .expect("Unable to sync manifest");
+
+        // Modify the README in dev/
+        std::fs::write(
+            format!("{}/dev/README.md", TEST_PATH),
+            "This is a new README",
+        )
+        .expect("Unable to modify README");
+
+        // Sync again without force option
+        let result = manifest.sync(git.as_ref(), &DwlMode::HTTPS, false, false, false);
+
+        // Assert we get an error
+        match result {
+            Err(e) => assert_eq!(
+                e,
+                "\n\n[./dev] repository is dirty, please commit or stash your changes\n"
+            ),
+            _ => panic!("Expected an error"),
+        }
+
+        // Cleanup
+        std::fs::remove_dir_all(TEST_PATH).unwrap();
+    }
+
+    #[test]
+    fn sync_when_new_file_is_added() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
+        const TEST_PATH: &str = "/tmp/manifest_test_new_file_is_added";
+        const TEST_MANIFEST_PATH: &str =
+            "/tmp/manifest_test_new_file_is_added/manifest_example.xml";
+        std::fs::create_dir_all(TEST_PATH).unwrap();
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, TEST_MANIFEST_PATH).unwrap();
+
+        let mut manifest = ManifestInstance::new(Some(&TEST_MANIFEST_PATH.to_string()))
+            .expect("Unable to get manifest file");
+
+        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
+        manifest
+            .parse(parser.as_ref())
+            .expect("Unable to parse manifest");
+
+        let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
+            .expect("Unable to sync manifest");
+
+        // Write a new file in dev/
+        std::fs::write(
+            format!("{}/dev/newREADME.md", TEST_PATH),
+            "This is a new README",
+        )
+        .expect("Unable to modify README");
+
+        // Sync again with force option
+        let result = manifest.sync(git.as_ref(), &DwlMode::HTTPS, false, false, true);
+
+        // Assert we get no error
+        assert!(result.is_ok());
+
+        // Cleanup
+        std::fs::remove_dir_all(TEST_PATH).unwrap();
+    }
+
+    #[test]
+    fn sync_with_delete_repository_action() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_del_repo.xml";
+        const TEST_PATH: &str = "/tmp/manifest_test_sync_delete_repository";
+        const TEST_MANIFEST_PATH: &str =
+            "/tmp/manifest_test_sync_delete_repository/manifest_del_repo.xml";
+        std::fs::create_dir_all(TEST_PATH).unwrap();
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, TEST_MANIFEST_PATH).unwrap();
+
+        let mut manifest = ManifestInstance::new(Some(&TEST_MANIFEST_PATH.to_string()))
+            .expect("Unable to get manifest file");
+
+        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
+        manifest
+            .parse(parser.as_ref())
+            .expect("Unable to parse manifest");
+
+        let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
+            .expect("Unable to sync manifest");
+
+        // Assert linkfile and copyfile
+        assert_eq!(
+            std::fs::read_to_string("/tmp/manifest_test_sync_delete_repository/dev/README.md")
+                .expect("Unable to read linkfile"),
+            std::fs::read_to_string(
+                "/tmp/manifest_test_sync_delete_repository/new_folder/ln_README.md"
+            )
+            .expect("ln_README.md"),
+        );
+
+        assert_eq!(
+            std::fs::read_to_string("/tmp/manifest_test_sync_delete_repository/dev/README.md")
+                .expect("Unable to read linkfile"),
+            std::fs::read_to_string("/tmp/manifest_test_sync_delete_repository/cp_README.md")
+                .expect("cp_README.md"),
+        );
+
+        // Assert delete action
+        assert!(
+            !std::path::Path::new("/tmp/manifest_test_sync_delete_repository/no_revision").exists()
+        );
+
+        // Cleanup
+        std::fs::remove_dir_all(TEST_PATH).unwrap();
+    }
+
+    #[test]
+    fn sync_with_copydir_action() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_copydir.xml";
+        const TEST_PATH: &str = "/tmp/manifest_test_sync_copydir";
+        const TEST_MANIFEST_PATH: &str = "/tmp/manifest_test_sync_copydir/manifest_copydir.xml";
+        std::fs::create_dir_all(TEST_PATH).unwrap();
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, TEST_MANIFEST_PATH).unwrap();
+
+        let mut manifest = ManifestInstance::new(Some(&TEST_MANIFEST_PATH.to_string()))
+            .expect("Unable to get manifest file");
+
+        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
+        manifest
+            .parse(parser.as_ref())
+            .expect("Unable to parse manifest");
+
+        let git: Box<GitVersionControl> = Box::new(GitVersionControl::new());
+        manifest
+            .sync(git.as_ref(), &DwlMode::HTTPS, false, false, false)
+            .expect("Unable to sync manifest");
+
+        // Assert copydir action
+        assert_eq!(
+            std::fs::read_to_string("/tmp/manifest_test_sync_copydir/dev/folder/src/version.rs")
+                .expect("Unable to read src/version.rs"),
+            std::fs::read_to_string("/tmp/manifest_test_sync_copydir/new_dev/src/version.rs")
+                .expect("copydir failed"),
+        );
 
         // Cleanup
         std::fs::remove_dir_all(TEST_PATH).unwrap();

@@ -9,7 +9,7 @@ specific revision / branch / commit.
 
 Create a manifest file named `manifest.xml` in the root of the project. You can use the
 `colligo --generate manifest.xml` command to generate a manifest with the file format and comments describing the
-different options.
+different options and available actions.
 
 ```bash
 colligo --generate manifest.xml
