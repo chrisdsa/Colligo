@@ -62,4 +62,35 @@ mod test_git_version_control {
 
         std::fs::remove_dir_all(PROJECT_PATH).unwrap();
     }
+
+    #[test]
+    fn commit_with_error_word_in_message() {
+        // Do not flag as ERROR commit with "error" or "fatal" in message
+        const PROJECT_URI: &str = "gitlab.com";
+        const PROJECT_NAME: &str = "cdsa_rust/manifest";
+        const PROJECT_PATH: &str = "/tmp/manifest/tests/git_test/m_repo_no_error";
+        const PROJECT_REVISION: &str = "main";
+        const CURRENT_DIR: &str = ".";
+
+        let project = Project::new(
+            PROJECT_URI.to_string(),
+            PROJECT_NAME.to_string(),
+            PROJECT_REVISION.to_string(),
+            PROJECT_PATH.to_string(),
+        );
+
+        let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
+        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, false);
+        assert!(result.is_ok());
+
+        let project = Project::new(
+            PROJECT_URI.to_string(),
+            PROJECT_NAME.to_string(),
+            "dev".to_string(),
+            PROJECT_PATH.to_string(),
+        );
+
+        let result = git.checkout(CURRENT_DIR, &project, None, false);
+        assert!(result.is_ok());
+    }
 }

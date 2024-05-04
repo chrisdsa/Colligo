@@ -281,20 +281,24 @@ fn process_command(
         std::thread::sleep(std::time::Duration::from_millis(PROGRESS_REFRESH_RATE_MS));
     }
 
-    // Check for error message in stderr_capture
-    let error_message: String = stderr_capture
-        .iter()
-        .filter(|line| line.contains("fatal") || line.contains("error"))
-        .fold(String::new(), |acc, line| acc + line + "\n");
+    let status = child.wait().expect("Failed to wait on child");
 
-    if !error_message.is_empty() {
+    if !status.success() {
+        // Update progress bar to show error
         if let Some(pb) = pb {
             pb.set_message(message[ERROR_INDEX].clone());
         }
+
+        // Check for error messages in stderr
+        let error_message: String = stderr_capture
+            .iter()
+            .filter(|line| line.contains("fatal") || line.contains("error"))
+            .fold(String::new(), |acc, line| acc + line + "\n");
+
         return Err(error_message);
     }
 
-    child.wait().expect("Failed to wait for child process");
+    // Print complete message
     if let Some(pb) = pb {
         pb.set_message(message[COMPLETE_INDEX].clone());
     }
