@@ -1,3 +1,7 @@
+# This is a branch to test Colligo
+
+Adding a commit with the words fatal and error in the commit message. 
+
 # manifest
 
 Manage the project's source dependencies by having an XML file describing where to clone / update git repositories to a
