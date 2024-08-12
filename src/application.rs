@@ -34,6 +34,9 @@ pub const QUIET: &str = "quiet";
 pub const FORCE: &str = "force";
 pub const HTTPS: &str = "https";
 
+pub const LIST: &str = "list";
+pub const STATUS: &str = "status";
+
 pub enum DwlMode {
     HTTPS,
     SSH,
@@ -73,6 +76,9 @@ pub trait VersionControl {
 
     /// Status of a project.
     fn get_commit_id(&self, manifest_dir: &str, project: &Project) -> Result<String, String>;
+
+    /// Return true if the project has modified file(s).
+    fn is_modified(&self, manifest_dir: &str, project: &Project) -> Result<bool, String>;
 }
 
 pub struct ManifestInstance {
@@ -297,7 +303,7 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
                 let dest = Path::new(manifest_dir).join(dest);
                 let src = Path::new(manifest_dir).join(project.get_path()).join(src);
 
-                let relative_src = get_relative_path(&src, &dest);
+                let relative_src = get_relative_path_for_symlink(&src, &dest);
                 prepare_file_destination(&dest)?;
 
                 let res = symlink(&relative_src, &dest);
@@ -408,7 +414,8 @@ fn prepare_file_destination(dest: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn get_relative_path(path: &Path, base: &Path) -> PathBuf {
+/// Return the relative path seen from base to create a symlink.
+fn get_relative_path_for_symlink(path: &Path, base: &Path) -> PathBuf {
     let base_dir = base.parent().unwrap_or("".as_ref());
 
     let path_dir = path.parent().unwrap_or("".as_ref());
@@ -440,4 +447,71 @@ fn copy_directory(src: &Path, dest: &Path) -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn list_projects_path(manifest: &ManifestInstance, workdir: &Path) -> Vec<String> {
+    let mut output = Vec::with_capacity(manifest.get_projects().len());
+
+    let manifest_dir = manifest.get_manifest_dir();
+    let manifest_dir = Path::new(&manifest_dir);
+
+    for project in manifest.get_projects() {
+        let repo_abs_path = manifest_dir.join(project.get_path());
+        let rel_path = pathdiff::diff_paths(repo_abs_path, workdir).unwrap_or("./".into());
+
+        output.push(rel_path.as_path().display().to_string());
+    }
+
+    output
+}
+
+pub fn get_projects_status(
+    manifest: &ManifestInstance,
+    vcs: &dyn VersionControl,
+    workdir: &Path,
+) -> Vec<String> {
+    struct ProjectStatus {
+        status: String,
+        path: String,
+    }
+
+    let mut project_status = Vec::with_capacity(manifest.get_projects().len());
+
+    let manifest_dir = manifest.get_manifest_dir();
+    let manifest_dir_path = Path::new(&manifest_dir);
+
+    for project in manifest.get_projects() {
+        let status = match vcs.is_modified(&manifest_dir, project) {
+            Ok(false) => "".to_string(),
+            Ok(true) => " (modified)".to_string(),
+            Err(e) => e,
+        };
+
+        let repo_abs_path = manifest_dir_path.join(project.get_path());
+        let rel_path = pathdiff::diff_paths(repo_abs_path, workdir)
+            .unwrap_or("./".into())
+            .to_string_lossy()
+            .to_string();
+
+        project_status.push(ProjectStatus {
+            status,
+            path: rel_path,
+        });
+    }
+
+    let max_path_len = project_status
+        .iter()
+        .map(|x| x.path.len())
+        .max()
+        .unwrap_or(0);
+
+    let output = project_status
+        .iter()
+        .map(|x| {
+            let padding = " ".repeat(max_path_len - x.path.len());
+            format!("{}{}{}", x.path, padding, x.status)
+        })
+        .collect();
+
+    output
 }

@@ -1,12 +1,14 @@
 use clap::{Arg, ArgAction, Command};
 use colligo::application::{
-    assert_dependencies, generate_default_manifest, save_file, DwlMode, ManifestInstance, APP_NAME,
-    FORCE, GENERATE_MANIFEST, HTTPS, LIGHT, MANIFEST_INPUT, PIN, QUIET, SYNC,
+    assert_dependencies, generate_default_manifest, get_projects_status, list_projects_path,
+    save_file, DwlMode, ManifestInstance, APP_NAME, FORCE, GENERATE_MANIFEST, HTTPS, LIGHT, LIST,
+    MANIFEST_INPUT, PIN, QUIET, STATUS, SYNC,
 };
 use colligo::git_version_control::GitVersionControl;
 use colligo::version::APP_VERSION;
 use colligo::xml_parser::XmlParser;
 use simple_logger::SimpleLogger;
+use std::env;
 
 const DEBUG_OPTION: &str = "debug";
 
@@ -70,6 +72,18 @@ fn main() {
         .value_name("FILE")
         .help("Manifest file with pinned revisions");
 
+    // List option
+    let list = Arg::new(LIST)
+        .long("list")
+        .action(ArgAction::SetTrue)
+        .help("List all projects absolute path in the manifest file");
+
+    // Status option
+    let status = Arg::new(STATUS)
+        .long("status")
+        .action(ArgAction::SetTrue)
+        .help("Get the status of all projects in the manifest file");
+
     // Debug option
     let debug = Arg::new(DEBUG_OPTION)
         .long(DEBUG_OPTION)
@@ -87,7 +101,9 @@ fn main() {
         .arg(quiet)
         .arg(force)
         .arg(pin)
+        .arg(list)
         .arg(debug)
+        .arg(status)
         .arg_required_else_help(true)
         .version(APP_VERSION)
         .get_matches();
@@ -180,6 +196,24 @@ fn main() {
         if let Err(error_msg) = save_file(path, pinned.get_file()) {
             eprintln!("{}", error_msg);
             std::process::exit(1);
+        }
+    }
+
+    // List all projects
+    if let Some(true) = matches.get_one::<bool>(LIST) {
+        let workdir = env::current_dir().expect("Unable to get current directory");
+        let projects = list_projects_path(&manifest, &workdir);
+        for project in projects {
+            println!("{}", project);
+        }
+    }
+
+    // Status
+    if let Some(true) = matches.get_one::<bool>(STATUS) {
+        let workdir = env::current_dir().expect("Unable to get current directory");
+        let all_status = get_projects_status(&manifest, &vcs, &workdir);
+        for status in all_status {
+            println!("{}", status);
         }
     }
 }

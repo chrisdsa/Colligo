@@ -239,6 +239,23 @@ impl VersionControl for GitVersionControl {
             Err(e) => Err(format!("ERROR [{path}]: {e}", path = project.get_path())),
         }
     }
+
+    fn is_modified(&self, manifest_dir: &str, project: &Project) -> Result<bool, String> {
+        let repo_path = Path::new(manifest_dir).join(project.get_path());
+
+        let output = Command::new("git")
+            .current_dir(&repo_path)
+            .args(["status", "--porcelain", "--untracked-files=no"])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let message = String::from_utf8_lossy(&output.stdout).to_string();
+                Ok(!message.is_empty())
+            }
+            Err(e) => Err(format!("ERROR [{path}]: {e}", path = project.get_path())),
+        }
+    }
 }
 
 unsafe impl Sync for GitVersionControl {}
