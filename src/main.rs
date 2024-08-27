@@ -5,12 +5,12 @@ use colligo::application::{
     MANIFEST_INPUT, PIN, QUIET, STATUS, SYNC,
 };
 use colligo::git_version_control::GitVersionControl;
-use colligo::version::APP_VERSION;
 use colligo::xml_parser::XmlParser;
 use simple_logger::SimpleLogger;
 use std::env;
 
 const DEBUG_OPTION: &str = "debug";
+const APP_VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"), "-", env!("GIT_SHA"));
 
 fn main() {
     // Generate manifest option
