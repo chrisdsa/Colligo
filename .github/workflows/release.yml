@@ -21,7 +21,7 @@ jobs:
         run: mkdir linux_x86_64 && mv target/x86_64-unknown-linux-gnu/release/colligo linux_x86_64/colligo
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: release_linux_${{ github.ref_name }}
           path: linux_x86_64
@@ -42,7 +42,7 @@ jobs:
         run: mkdir win_x86_64 && mv target/x86_64-pc-windows-gnu/release/colligo.exe win_x86_64/colligo.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: release_windows_${{ github.ref_name }}
           path: win_x86_64
@@ -61,7 +61,7 @@ jobs:
           path: linux_x86_64
 
       - name: Download windows artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: release_windows_${{ github.ref_name }}
           path: win_x86_64
@@ -70,7 +70,7 @@ jobs:
         run: zip -r linux_x86_64.zip linux_x86_64 && zip -r win_x86_64.zip win_x86_64
 
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             linux_x86_64.zip
