@@ -8,17 +8,18 @@ permissions:
 jobs:
   create_linux_executable:
     runs-on: ubuntu-latest
-    container: chrisdsa/rust:1.68-0.1.0
+    container:
+      image: chrisdsa/rust:1.68-0.1.0
+      options: --user 1001
     steps:
-      - uses: actions/checkout@v3
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-7`" >> $GITHUB_ENV
-      - name: Set version
-        run: 'echo "pub const APP_VERSION: &str = \"${{ github.ref_name }}-${SHORT_SHA}\";" > src/version.rs'
+      - uses: actions/checkout@v4
+
       - name: Build
         run: cargo build --target x86_64-unknown-linux-gnu --release
+
       - name: Create artifact
         run: mkdir linux_x86_64 && mv target/x86_64-unknown-linux-gnu/release/colligo linux_x86_64/colligo
+
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
@@ -29,17 +30,17 @@ jobs:
 
   create_windows_executable:
     runs-on: ubuntu-latest
-    container: chrisdsa/rust_mingw:1.68-0.1.0
+    container:
+      image: chrisdsa/rust_mingw:1.68-0.1.0
+      options: --user 1001
     steps:
-      - uses: actions/checkout@v3
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-7`" >> $GITHUB_ENV
-      - name: Set version
-        run: 'echo "pub const APP_VERSION: &str = \"${{ github.ref_name }}-${SHORT_SHA}\";" > src/version.rs'
+      - uses: actions/checkout@v4
       - name: Build
         run: cargo build --target x86_64-pc-windows-gnu --release
+
       - name: Create artifact
         run: mkdir win_x86_64 && mv target/x86_64-pc-windows-gnu/release/colligo.exe win_x86_64/colligo.exe
+
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
@@ -54,17 +55,20 @@ jobs:
       - create_windows_executable
     steps:
       - name: Download linux artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: release_linux_${{ github.ref_name }}
           path: linux_x86_64
+
       - name: Download windows artifacts
         uses: actions/download-artifact@v3
         with:
           name: release_windows_${{ github.ref_name }}
           path: win_x86_64
+
       - name: zip artifacts
         run: zip -r linux_x86_64.zip linux_x86_64 && zip -r win_x86_64.zip win_x86_64
+
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+app_version=$(grep '^version' Cargo.toml | head -n 1 | sed -E 's/version = "(.*)"/\1/')
+
+# Check if tag exists
+if git rev-parse "v$app_version" >/dev/null 2>&1; then
+    # Tag found
+    echo "Version $app_version already exists"
+    exit 1
+else
+    # Tag not found
+    exit 0
+fi
