@@ -4,7 +4,6 @@ use colligo::application::{
     save_file, DwlMode, ManifestInstance, APP_NAME, FORCE, GENERATE_MANIFEST, HTTPS, LIGHT, LIST,
     MANIFEST_INPUT, PIN, QUIET, STATUS, SYNC,
 };
-use colligo::git_version_control::GitVersionControl;
 use colligo::xml_parser::XmlParser;
 use simple_logger::SimpleLogger;
 use std::env;
@@ -167,15 +166,12 @@ fn main() {
         _ => DwlMode::SSH,
     };
 
-    // Get version control system. Currently only support Git.
-    let vcs = GitVersionControl::new();
-
     // Synchronize all projects
     if let Some(true) = matches.get_one::<bool>(SYNC) {
         let light = *matches.get_one::<bool>(LIGHT).unwrap_or(&false);
 
         conditional_println(quiet, "Synchronize all projects".to_string());
-        if let Err(error_msg) = manifest.sync(&vcs, &dwl_mode, light, quiet, force) {
+        if let Err(error_msg) = manifest.sync(&dwl_mode, light, quiet, force) {
             eprintln!("{}", error_msg);
             std::process::exit(1);
         }
@@ -185,7 +181,7 @@ fn main() {
     // Pin manifest
     if let Some(path) = matches.get_one::<String>(PIN) {
         conditional_println(quiet, "Pin manifest".to_string());
-        let pinned = match manifest.pin(&vcs, &xml_parser) {
+        let pinned = match manifest.pin(&xml_parser) {
             Ok(pinned) => pinned,
             Err(error_msg) => {
                 eprintln!("{}", error_msg);
@@ -211,7 +207,7 @@ fn main() {
     // Status
     if let Some(true) = matches.get_one::<bool>(STATUS) {
         let workdir = env::current_dir().expect("Unable to get current directory");
-        let all_status = get_projects_status(&manifest, &vcs, &workdir);
+        let all_status = get_projects_status(&manifest, &workdir);
         for status in all_status {
             println!("{}", status);
         }

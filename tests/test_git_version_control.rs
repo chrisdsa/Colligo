@@ -10,57 +10,52 @@ mod test_git_version_control {
     fn clone_project_ssh() {
         const PROJECT_URI: &str = "gitlab.com";
         const PROJECT_NAME: &str = "cdsa_rust/manifest";
-        const PROJECT_PATH: &str = "/tmp/manifest/tests/git_test/m_repo";
         const PROJECT_REVISION: &str = "dev";
-        const CURRENT_DIR: &str = ".";
+        let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
         let project = Project::new(
             PROJECT_URI.to_string(),
             PROJECT_NAME.to_string(),
             PROJECT_REVISION.to_string(),
-            PROJECT_PATH.to_string(),
+            temp_dir.path().display().to_string(),
         );
 
-        let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
-        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, false);
-        let _ = git.checkout(CURRENT_DIR, &project, None, false);
+        let git = GitVersionControl::new();
+        let result = git.clone(temp_dir.path().to_str().unwrap(), &project, &DwlMode::HTTPS, None, false);
+        let _ = git.checkout(temp_dir.path().to_str().unwrap(), &project, None, false);
 
         assert!(result.is_ok());
-        let repo = Repository::open(PROJECT_PATH).expect("Unable to open repository");
+        let repo = Repository::open(temp_dir.path()).expect("Unable to open repository");
         let head = repo.head().expect("Unable to get head");
         assert_eq!(head.name(), Some("refs/heads/dev"));
-
-        std::fs::remove_dir_all(PROJECT_PATH).unwrap();
     }
 
     #[test]
     fn clone_project_lightweight_ssh() {
         const PROJECT_URI: &str = "gitlab.com";
         const PROJECT_NAME: &str = "cdsa_rust/manifest";
-        const PROJECT_PATH: &str = "/tmp/manifest/tests/git_test/m_repo_light";
         const PROJECT_REVISION: &str = "v0.0.0";
-        const CURRENT_DIR: &str = ".";
+        let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
+
         let project = Project::new(
             PROJECT_URI.to_string(),
             PROJECT_NAME.to_string(),
             PROJECT_REVISION.to_string(),
-            PROJECT_PATH.to_string(),
+            temp_dir.path().display().to_string(),
         );
 
-        let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
-        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, true);
+        let git = GitVersionControl::new();
+        let result = git.clone(temp_dir.path().to_str().unwrap(), &project, &DwlMode::HTTPS, None, true);
 
         assert!(result.is_ok());
-        let repo = Repository::open(PROJECT_PATH).expect("Unable to open repository");
+        let repo = Repository::open(temp_dir.path()).expect("Unable to open repository");
         let head = repo.head().expect("Unable to get head");
         assert_eq!(
             head.peel_to_commit().unwrap().id().to_string(),
             "565b113e57b2c67dcaa3e7c2b5040cf4715221df"
         );
 
-        let commit_id = git.get_commit_id(CURRENT_DIR, &project).unwrap();
+        let commit_id = git.get_commit_id(temp_dir.path().to_str().unwrap(), &project).unwrap();
         assert_eq!(commit_id, "565b113e57b2c67dcaa3e7c2b5040cf4715221df");
-
-        std::fs::remove_dir_all(PROJECT_PATH).unwrap();
     }
 
     #[test]
@@ -68,29 +63,34 @@ mod test_git_version_control {
         // Do not flag as ERROR commit with "error" or "fatal" in message
         const PROJECT_URI: &str = "gitlab.com";
         const PROJECT_NAME: &str = "cdsa_rust/manifest";
-        const PROJECT_PATH: &str = "/tmp/manifest/tests/git_test/m_repo_no_error";
         const PROJECT_REVISION: &str = "main";
-        const CURRENT_DIR: &str = ".";
+        let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
 
         let project = Project::new(
             PROJECT_URI.to_string(),
             PROJECT_NAME.to_string(),
             PROJECT_REVISION.to_string(),
-            PROJECT_PATH.to_string(),
+            temp_dir.path().display().to_string(),
         );
 
-        let git: Box<dyn VersionControl> = Box::new(GitVersionControl::new());
-        let result = git.clone(CURRENT_DIR, &project, &DwlMode::HTTPS, None, false);
+        let git = GitVersionControl::new();
+        let result = git.clone(
+            temp_dir.path().to_str().unwrap(),
+            &project,
+            &DwlMode::HTTPS,
+            None,
+            false,
+        );
         assert!(result.is_ok());
 
         let project = Project::new(
             PROJECT_URI.to_string(),
             PROJECT_NAME.to_string(),
             "dev".to_string(),
-            PROJECT_PATH.to_string(),
+            temp_dir.path().display().to_string(),
         );
 
-        let result = git.checkout(CURRENT_DIR, &project, None, false);
+        let result = git.checkout(temp_dir.path().to_str().unwrap(), &project, None, false);
         assert!(result.is_ok());
     }
 }
