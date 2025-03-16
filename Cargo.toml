@@ -18,3 +18,4 @@ features = ["stderr"]
 
 [dev-dependencies]
 git2 = "0.18.1"
+tempfile = "3.19"

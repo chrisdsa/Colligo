@@ -16,6 +16,7 @@ use std::os::unix::fs::symlink;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::symlink_file as symlink;
+use crate::git_version_control::GitVersionControl;
 
 // Application description
 pub const APP_NAME: &str = "Colligo";
@@ -115,16 +116,13 @@ impl ManifestInstance {
         Ok(())
     }
 
-    pub fn sync<T>(
+    pub fn sync(
         &self,
-        vcs: &T,
         mode: &DwlMode,
         lightweight: bool,
         quiet: bool,
         force: bool,
     ) -> Result<(), String>
-    where
-        T: VersionControl + Sync,
     {
         // Prepare progress bar
         let multi_progress = MultiProgress::new();
@@ -161,6 +159,8 @@ impl ManifestInstance {
                 s.spawn(move || {
                     let dir = self.get_manifest_dir();
                     let mut result = Ok(());
+
+                    let vcs = GitVersionControl::new();
 
                     if is_ok_to_clone(&dir, project.get_path()) {
                         result = vcs.clone(&dir, project, mode, pb.as_ref(), lightweight);
@@ -211,11 +211,10 @@ impl ManifestInstance {
         Ok(())
     }
 
-    pub fn pin<T>(&self, vcs: &T, parser: &dyn ManifestParser) -> Result<Self, String>
-    where
-        T: VersionControl,
+    pub fn pin(&self, parser: &dyn ManifestParser) -> Result<Self, String>
     {
         let mut projects: Vec<Project> = Vec::new();
+        let vcs = GitVersionControl::new();
 
         for project in self.projects.iter() {
             let commit_id = vcs.get_commit_id(&self.get_manifest_dir(), project)?;
@@ -467,7 +466,6 @@ pub fn list_projects_path(manifest: &ManifestInstance, workdir: &Path) -> Vec<St
 
 pub fn get_projects_status(
     manifest: &ManifestInstance,
-    vcs: &dyn VersionControl,
     workdir: &Path,
 ) -> Vec<String> {
     struct ProjectStatus {
@@ -479,6 +477,7 @@ pub fn get_projects_status(
 
     let manifest_dir = manifest.get_manifest_dir();
     let manifest_dir_path = Path::new(&manifest_dir);
+    let vcs = GitVersionControl::new();
 
     for project in manifest.get_projects() {
         let status = match vcs.is_modified(&manifest_dir, project) {
