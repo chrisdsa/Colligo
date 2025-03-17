@@ -20,7 +20,13 @@ mod test_git_version_control {
         );
 
         let git = GitVersionControl::new();
-        let result = git.clone(temp_dir.path().to_str().unwrap(), &project, &DwlMode::HTTPS, None, false);
+        let result = git.clone(
+            temp_dir.path().to_str().unwrap(),
+            &project,
+            &DwlMode::HTTPS,
+            None,
+            false,
+        );
         let _ = git.checkout(temp_dir.path().to_str().unwrap(), &project, None, false);
 
         assert!(result.is_ok());
@@ -44,7 +50,13 @@ mod test_git_version_control {
         );
 
         let git = GitVersionControl::new();
-        let result = git.clone(temp_dir.path().to_str().unwrap(), &project, &DwlMode::HTTPS, None, true);
+        let result = git.clone(
+            temp_dir.path().to_str().unwrap(),
+            &project,
+            &DwlMode::HTTPS,
+            None,
+            true,
+        );
 
         assert!(result.is_ok());
         let repo = Repository::open(temp_dir.path()).expect("Unable to open repository");
@@ -54,7 +66,9 @@ mod test_git_version_control {
             "565b113e57b2c67dcaa3e7c2b5040cf4715221df"
         );
 
-        let commit_id = git.get_commit_id(temp_dir.path().to_str().unwrap(), &project).unwrap();
+        let commit_id = git
+            .get_commit_id(temp_dir.path().to_str().unwrap(), &project)
+            .unwrap();
         assert_eq!(commit_id, "565b113e57b2c67dcaa3e7c2b5040cf4715221df");
     }
 

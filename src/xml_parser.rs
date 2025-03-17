@@ -1,4 +1,4 @@
-use crate::application::ManifestParser;
+use crate::application::{ManifestError, ManifestParser};
 use crate::project::{Project, ProjectAction, ProjectFileAction, DEFAULT_HOST, DEFAULT_REVISION};
 use log::warn;
 use roxmltree::{Document, Node};
@@ -47,7 +47,7 @@ impl Default for XmlParser {
 }
 
 impl ManifestParser for XmlParser {
-    fn parse(&self, file: &str) -> Result<Vec<Project>, String> {
+    fn parse(&self, file: &str) -> Result<Vec<Project>, ManifestError> {
         let mut projects: Vec<Project> = Vec::new();
 
         let parsed_xml = parse_xml_file(file)?;
@@ -72,7 +72,7 @@ impl ManifestParser for XmlParser {
         Ok(projects)
     }
 
-    fn compose(&self, projects: &[Project]) -> Result<String, String> {
+    fn compose(&self, projects: &[Project]) -> Result<String, ManifestError> {
         let mut xml = String::new();
         xml.push_str(XML_HEADER);
         xml.push_str(ROOT_BEGIN);
@@ -86,7 +86,7 @@ impl ManifestParser for XmlParser {
     }
 }
 
-fn parse_xml_file(file: &str) -> Result<Document, String> {
+fn parse_xml_file(file: &str) -> Result<Document, ManifestError> {
     let xml = Document::parse(file);
     let parsed_xml;
     match xml {
@@ -94,21 +94,30 @@ fn parse_xml_file(file: &str) -> Result<Document, String> {
             parsed_xml = xml.unwrap();
             Ok(parsed_xml)
         }
-        Err(_) => Err("Unable to parse XML".to_string()),
+        Err(_) => {
+            let msg = "Unable to parse XML".to_string();
+            Err(ManifestError::FailedToParseManifest(msg))
+        }
     }
 }
 
-fn get_name(node: &Node) -> Result<String, String> {
+fn get_name(node: &Node) -> Result<String, ManifestError> {
     match node.attribute("name") {
         Some(value) => Ok(value.to_string()),
-        None => Err("<project --> name= <-- /> is missing".to_string()),
+        None => {
+            let msg = "<project --> name= <-- /> is missing".to_string();
+            Err(ManifestError::FailedToParseManifest(msg))
+        }
     }
 }
 
-fn get_path(node: &Node) -> Result<String, String> {
+fn get_path(node: &Node) -> Result<String, ManifestError> {
     match node.attribute("path") {
         Some(value) => Ok(value.to_string()),
-        None => Err("<project --> path= <-- /> is missing".to_string()),
+        None => {
+            let msg = "<project --> path= <-- /> is missing".to_string();
+            Err(ManifestError::FailedToParseManifest(msg))
+        }
     }
 }
 
@@ -122,7 +131,7 @@ fn get_uri(node: &Node, default: &DefaultParameters) -> String {
     node.attribute("uri").unwrap_or(&default.uri).to_string()
 }
 
-fn add_actions(instance: &mut Project, node: &Node) -> Result<(), String> {
+fn add_actions(instance: &mut Project, node: &Node) -> Result<(), ManifestError> {
     if let Some(child) = node.first_element_child() {
         for action in child.next_siblings().filter(|n| n.is_element()) {
             let action_name = action.tag_name().name().to_string();
@@ -133,7 +142,8 @@ fn add_actions(instance: &mut Project, node: &Node) -> Result<(), String> {
                     let dest = action.attribute("dest").unwrap().to_string();
                     instance.add_file_action(&action_name, src, dest);
                 } else {
-                    return Err("<[linkfile or copyfile] /> is missing src or dest".to_string());
+                    let msg = "<[linkfile or copyfile] /> is missing src or dest".to_string();
+                    return Err(ManifestError::FailedToParseManifest(msg));
                 }
             } else if instance.is_delete_project(&action_name) {
                 instance.add_delete_project();

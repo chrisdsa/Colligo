@@ -2,9 +2,8 @@ use clap::{Arg, ArgAction, Command};
 use colligo::application::{
     assert_dependencies, generate_default_manifest, get_projects_status, list_projects_path,
     save_file, DwlMode, ManifestInstance, APP_NAME, FORCE, GENERATE_MANIFEST, HTTPS, LIGHT, LIST,
-    MANIFEST_INPUT, PIN, QUIET, STATUS, SYNC,
+    MANIFEST_INPUT, MANIFEST_INPUT_DEFAULT, PIN, QUIET, STATUS, SYNC,
 };
-use colligo::xml_parser::XmlParser;
 use simple_logger::SimpleLogger;
 use std::env;
 
@@ -140,22 +139,26 @@ fn main() {
 
     // All following commands require a manifest file
     // Manifest input
-    let manifest_path = matches.get_one::<String>(MANIFEST_INPUT);
-    let mut manifest = match ManifestInstance::new(manifest_path) {
+    let default_manifest = MANIFEST_INPUT_DEFAULT.to_string();
+    let manifest_path = matches
+        .get_one::<String>(MANIFEST_INPUT)
+        .unwrap_or(&default_manifest);
+    let mut manifest = match ManifestInstance::try_from(manifest_path) {
         Ok(manifest) => manifest,
-        Err(error_msg) => {
-            eprintln!("{}", error_msg);
+        Err(_) => {
             std::process::exit(1);
         }
     };
 
     // Parse manifest file. Currently only support XML format.
-    let xml_parser = XmlParser::new();
     conditional_println(
         quiet,
-        format!("Parsing manifest file: {}", manifest.get_filename()),
+        format!(
+            "Parsing manifest file: {}",
+            manifest.get_filename().display()
+        ),
     );
-    if let Err(error_msg) = manifest.parse(&xml_parser) {
+    if let Err(error_msg) = manifest.parse() {
         eprintln!("{}", error_msg);
         std::process::exit(1);
     }
@@ -181,7 +184,7 @@ fn main() {
     // Pin manifest
     if let Some(path) = matches.get_one::<String>(PIN) {
         conditional_println(quiet, "Pin manifest".to_string());
-        let pinned = match manifest.pin(&xml_parser) {
+        let pinned = match manifest.pin() {
             Ok(pinned) => pinned,
             Err(error_msg) => {
                 eprintln!("{}", error_msg);

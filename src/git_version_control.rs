@@ -1,4 +1,4 @@
-use crate::application::{DwlMode, VersionControl};
+use crate::application::{DwlMode, ManifestError, VersionControl};
 use crate::project::Project;
 use indicatif::ProgressBar;
 use log::debug;
@@ -25,20 +25,20 @@ impl Default for GitVersionControl {
 }
 
 impl VersionControl for GitVersionControl {
-    fn clone(
+    fn clone<P: AsRef<Path>>(
         &self,
-        manifest_dir: &str,
+        manifest_dir: P,
         project: &Project,
         mode: &DwlMode,
         pb: Option<&ProgressBar>,
         lightweight: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManifestError> {
         let url = match mode {
             DwlMode::HTTPS => project.get_uri_https(),
             DwlMode::SSH => project.get_uri_ssh(),
         };
 
-        let repo_path = Path::new(manifest_dir).join(project.get_path());
+        let repo_path = manifest_dir.as_ref().join(project.get_path());
 
         debug!(
             "Cloning {} into {}",
@@ -86,7 +86,8 @@ impl VersionControl for GitVersionControl {
         match process_command(&mut command, pb, &display_status) {
             Ok(_) => {}
             Err(e) => {
-                return Err(format!("[{}] Cloning error: \n{}\n", project.get_path(), e));
+                let msg = format!("[{}] Cloning error: \n{}\n", project.get_path(), e);
+                return Err(ManifestError::FailedToCloneRepository(msg));
             }
         }
 
@@ -96,14 +97,14 @@ impl VersionControl for GitVersionControl {
         Ok(())
     }
 
-    fn checkout(
+    fn checkout<P: AsRef<Path>>(
         &self,
-        manifest_dir: &str,
+        manifest_dir: P,
         project: &Project,
         pb: Option<&ProgressBar>,
         force: bool,
-    ) -> Result<(), String> {
-        let repo_path = Path::new(manifest_dir).join(project.get_path());
+    ) -> Result<(), ManifestError> {
+        let repo_path = manifest_dir.as_ref().join(project.get_path());
 
         debug!(
             "Checking out {} into {} @ {}",
@@ -127,7 +128,8 @@ impl VersionControl for GitVersionControl {
         match process_command(&mut command, pb, &display_status) {
             Ok(_) => {}
             Err(e) => {
-                return Err(format!("[{}] fetch error: \n{}\n", project.get_path(), e));
+                let msg = format!("[{}] fetch error: \n{}\n", project.get_path(), e);
+                return Err(ManifestError::FailedToCheckoutRepository(msg));
             }
         }
 
@@ -151,11 +153,8 @@ impl VersionControl for GitVersionControl {
         match process_command(&mut command, pb, &display_status) {
             Ok(_) => {}
             Err(e) => {
-                return Err(format!(
-                    "[{}] checkout error: \n{}\n",
-                    project.get_path(),
-                    e
-                ));
+                let msg = format!("[{}] checkout error: \n{}\n", project.get_path(), e);
+                return Err(ManifestError::FailedToCheckoutRepository(msg));
             }
         }
 
@@ -172,18 +171,20 @@ impl VersionControl for GitVersionControl {
                     if let Some(pb) = pb {
                         pb.set_message(format!("{} ERROR", project.get_path()));
                     }
-                    return Err(format!(
+                    let msg = format!(
                         "[{}] repository is dirty, please commit or stash your changes",
                         project.get_path()
-                    ));
+                    );
+                    return Err(ManifestError::FailedToCheckoutRepository(msg));
                 }
             }
             Err(e) => {
-                return Err(format!(
+                let msg = format!(
                     "[{}] failed to check repository status: \n{}\n",
                     project.get_path(),
                     e
-                ));
+                );
+                return Err(ManifestError::FailedToCheckoutRepository(msg));
             }
         }
 
@@ -204,7 +205,8 @@ impl VersionControl for GitVersionControl {
             match process_command(&mut command, pb, &display_status) {
                 Ok(_) => {}
                 Err(e) => {
-                    return Err(format!("[{}] merge error: \n{}\n", project.get_path(), e));
+                    let msg = format!("[{}] merge error: \n{}\n", project.get_path(), e);
+                    return Err(ManifestError::FailedToCheckoutRepository(msg));
                 }
             }
         }
@@ -215,8 +217,12 @@ impl VersionControl for GitVersionControl {
         Ok(())
     }
 
-    fn get_commit_id(&self, manifest_dir: &str, project: &Project) -> Result<String, String> {
-        let repo_path = Path::new(manifest_dir).join(project.get_path());
+    fn get_commit_id<P: AsRef<Path>>(
+        &self,
+        manifest_dir: P,
+        project: &Project,
+    ) -> Result<String, ManifestError> {
+        let repo_path = manifest_dir.as_ref().join(project.get_path());
 
         debug!(
             "Getting commit id for {} into {}",
@@ -236,12 +242,19 @@ impl VersionControl for GitVersionControl {
                     .replace(['\n', '\r'], "");
                 Ok(message)
             }
-            Err(e) => Err(format!("ERROR [{path}]: {e}", path = project.get_path())),
+            Err(e) => {
+                let msg = format!("ERROR [{path}]: {e}", path = project.get_path());
+                Err(ManifestError::FailedToGetCommitId(msg))
+            }
         }
     }
 
-    fn is_modified(&self, manifest_dir: &str, project: &Project) -> Result<bool, String> {
-        let repo_path = Path::new(manifest_dir).join(project.get_path());
+    fn is_modified<P: AsRef<Path>>(
+        &self,
+        manifest_dir: P,
+        project: &Project,
+    ) -> Result<bool, ManifestError> {
+        let repo_path = manifest_dir.as_ref().join(project.get_path());
 
         let output = Command::new("git")
             .current_dir(&repo_path)
@@ -253,7 +266,10 @@ impl VersionControl for GitVersionControl {
                 let message = String::from_utf8_lossy(&output.stdout).to_string();
                 Ok(!message.is_empty())
             }
-            Err(e) => Err(format!("ERROR [{path}]: {e}", path = project.get_path())),
+            Err(e) => {
+                let msg = format!("ERROR [{path}]: {e}", path = project.get_path());
+                Err(ManifestError::FailedToDetermineIfRepoIsModified(msg))
+            }
         }
     }
 }
@@ -323,8 +339,8 @@ fn process_command(
     Ok(())
 }
 
-fn is_branch(manifest_dir: &str, project: &Project) -> bool {
-    let repo_path = Path::new(manifest_dir).join(project.get_path());
+fn is_branch<P: AsRef<Path>>(manifest_dir: P, project: &Project) -> bool {
+    let repo_path = manifest_dir.as_ref().join(project.get_path());
     let output = Command::new("git")
         .current_dir(repo_path)
         .args(["status"])

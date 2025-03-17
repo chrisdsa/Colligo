@@ -2,8 +2,11 @@ use crate::default_manifest::DEFAULT_MANIFEST_FILE;
 use crate::project::{Project, ProjectAction, ProjectFileAction};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::VecDeque;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::Write;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::channel;
@@ -11,12 +14,9 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread};
 
-#[cfg(target_os = "linux")]
-use std::os::unix::fs::symlink;
-
+use crate::git_version_control::GitVersionControl;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::symlink_file as symlink;
-use crate::git_version_control::GitVersionControl;
 
 // Application description
 pub const APP_NAME: &str = "Colligo";
@@ -45,10 +45,10 @@ pub enum DwlMode {
 
 pub trait ManifestParser {
     /// Parse a manifest file and return a vector of projects.
-    fn parse(&self, file: &str) -> Result<Vec<Project>, String>;
+    fn parse(&self, file: &str) -> Result<Vec<Project>, ManifestError>;
 
     /// Compose a manifest file from a vector of projects.
-    fn compose(&self, projects: &[Project]) -> Result<String, String>;
+    fn compose(&self, projects: &[Project]) -> Result<String, ManifestError>;
 }
 
 /// VersionControl is a trait that defines the methods to interact with a version control system.
@@ -57,49 +57,132 @@ pub trait ManifestParser {
 /// When using the lightweight option, the revision MUST be a branch or a tag. Commit ID are not supported.
 pub trait VersionControl {
     /// Clone a project from a URI to a path.
-    fn clone(
+    fn clone<P: AsRef<Path>>(
         &self,
-        manifest_dir: &str,
+        manifest_dir: P,
         project: &Project,
         mode: &DwlMode,
         pb: Option<&ProgressBar>,
         lightweight: bool,
-    ) -> Result<(), String>;
+    ) -> Result<(), ManifestError>;
 
     /// Update a project to a specific revision.
-    fn checkout(
+    fn checkout<P: AsRef<Path>>(
         &self,
-        manifest_dir: &str,
+        manifest_dir: P,
         project: &Project,
         pb: Option<&ProgressBar>,
         force: bool,
-    ) -> Result<(), String>;
+    ) -> Result<(), ManifestError>;
 
     /// Status of a project.
-    fn get_commit_id(&self, manifest_dir: &str, project: &Project) -> Result<String, String>;
+    fn get_commit_id<P: AsRef<Path>>(
+        &self,
+        manifest_dir: P,
+        project: &Project,
+    ) -> Result<String, ManifestError>;
 
     /// Return true if the project has modified file(s).
-    fn is_modified(&self, manifest_dir: &str, project: &Project) -> Result<bool, String>;
+    fn is_modified<P: AsRef<Path>>(
+        &self,
+        manifest_dir: P,
+        project: &Project,
+    ) -> Result<bool, ManifestError>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ManifestError {
+    FailedToGetAbsolutePath(String),
+    FileDoesNotExist(String),
+    FailedToReadManifest(String),
+    FailedToParseManifest(String),
+    FailedToGenerateDefaultManifest(String),
+    FailedToComposeManifest(String),
+    FailedToExecuteAction(String),
+    FailedToCloneRepository(String),
+    FailedToCheckoutRepository(String),
+    FailedToGetCommitId(String),
+    FailedToDetermineIfRepoIsModified(String),
+    FailedToSync(String),
+    FailedToSaveFile(String),
+    MissingDependency(String),
+}
+
+impl Display for ManifestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ManifestError::FailedToGetAbsolutePath(e) => {
+                write!(f, "Failed to get absolute path of {}", e)
+            }
+            ManifestError::FileDoesNotExist(e) => {
+                write!(f, "File does not exist: {}", e)
+            }
+            ManifestError::FailedToReadManifest(e) => {
+                write!(f, "Failed to read manifest file: {}", e)
+            }
+            ManifestError::FailedToParseManifest(e) => {
+                write!(f, "Failed to parse manifest file: {}", e)
+            }
+            ManifestError::FailedToComposeManifest(e) => {
+                write!(f, "Failed to compose manifest file: {}", e)
+            }
+            ManifestError::FailedToExecuteAction(e) => {
+                write!(f, "Failed to execute action: {}", e)
+            }
+            ManifestError::FailedToCloneRepository(e) => {
+                write!(f, "Failed to clone repository: {}", e)
+            }
+            ManifestError::FailedToCheckoutRepository(e) => {
+                write!(f, "Failed to checkout repository: {}", e)
+            }
+            ManifestError::FailedToGetCommitId(e) => {
+                write!(f, "Failed to get commit id: {}", e)
+            }
+            ManifestError::FailedToDetermineIfRepoIsModified(e) => {
+                write!(f, "Failed to determine if repo is modified: {}", e)
+            }
+            ManifestError::FailedToSync(e) => {
+                write!(f, "Failed to sync manifest: {}", e)
+            }
+            ManifestError::FailedToSaveFile(e) => {
+                write!(f, "Failed to save file: {}", e)
+            }
+            ManifestError::MissingDependency(e) => {
+                write!(f, "Failed to find dependency: {}", e)
+            }
+            ManifestError::FailedToGenerateDefaultManifest(e) => {
+                write!(f, "Failed to generate default manifest file: {}", e)
+            }
+        }
+    }
 }
 
 pub struct ManifestInstance {
-    filename: String,
+    /// Absolute path to the manifest file
+    filename: PathBuf,
+    /// Manifest content
     file: String,
+    /// Vector with all projects
     projects: Vec<Project>,
 }
 
 impl ManifestInstance {
-    pub fn new(filename: Option<&String>) -> Result<Self, String> {
-        let (name, file) = read_manifest(filename)?;
+    pub fn try_from<P: AsRef<Path>>(filename: P) -> Result<Self, ManifestError> {
+        let file = read_manifest(&filename)?;
+
+        let filename = filename.as_ref().canonicalize().map_err(|_| {
+            let name = filename.as_ref().display().to_string();
+            ManifestError::FailedToGetAbsolutePath(name)
+        })?;
 
         Ok(Self {
-            filename: name,
+            filename,
             file,
             projects: Vec::new(),
         })
     }
 
-    pub fn get_filename(&self) -> &String {
+    pub fn get_filename(&self) -> &PathBuf {
         &self.filename
     }
 
@@ -111,7 +194,8 @@ impl ManifestInstance {
         &self.projects
     }
 
-    pub fn parse(&mut self, parser: &dyn ManifestParser) -> Result<(), String> {
+    pub fn parse(&mut self) -> Result<(), ManifestError> {
+        let parser = crate::xml_parser::XmlParser::new();
         self.projects = parser.parse(&self.file)?;
         Ok(())
     }
@@ -122,8 +206,7 @@ impl ManifestInstance {
         lightweight: bool,
         quiet: bool,
         force: bool,
-    ) -> Result<(), String>
-    {
+    ) -> Result<(), ManifestError> {
         // Prepare progress bar
         let multi_progress = MultiProgress::new();
         let style = ProgressStyle::default_bar()
@@ -189,8 +272,12 @@ impl ManifestInstance {
         let errors: Vec<String> = rx
             .iter()
             .filter_map(|code| match code {
-                Ok(_) => None,
-                Err(msg) => Some(msg),
+                Err(ManifestError::FailedToExecuteAction(e))
+                | Err(ManifestError::FailedToCloneRepository(e))
+                | Err(ManifestError::FailedToCheckoutRepository(e))
+                | Err(ManifestError::FailedToGetCommitId(e))
+                | Err(ManifestError::FailedToDetermineIfRepoIsModified(e)) => Some(e),
+                Ok(_) | Err(_) => None,
             })
             .collect();
 
@@ -205,23 +292,23 @@ impl ManifestInstance {
                 error_msg.push('\n');
             }
 
-            return Err(error_msg);
+            return Err(ManifestError::FailedToSync(error_msg));
         }
 
         Ok(())
     }
 
-    pub fn pin(&self, parser: &dyn ManifestParser) -> Result<Self, String>
-    {
+    pub fn pin(&self) -> Result<Self, ManifestError> {
         let mut projects: Vec<Project> = Vec::new();
         let vcs = GitVersionControl::new();
 
         for project in self.projects.iter() {
-            let commit_id = vcs.get_commit_id(&self.get_manifest_dir(), project)?;
+            let commit_id = vcs.get_commit_id(self.get_manifest_dir(), project)?;
             let pinned_project = project.pin(commit_id);
             projects.push(pinned_project);
         }
 
+        let parser = crate::xml_parser::XmlParser::new();
         let file = parser.compose(&projects)?;
 
         Ok(Self {
@@ -240,35 +327,39 @@ impl ManifestInstance {
     }
 }
 
-pub fn generate_default_manifest(destination: &String) -> Result<(), String> {
+pub fn generate_default_manifest(destination: &String) -> Result<(), ManifestError> {
     let file = File::create(destination);
 
     match file {
         Ok(_) => {}
-        Err(_) => return Err(format!("Failed to create manifest file {destination}")),
+        Err(_) => {
+            let msg = format!("Failed to create manifest file {destination}");
+            return Err(ManifestError::FailedToGenerateDefaultManifest(msg));
+        }
     }
 
     let res = file.unwrap().write_all(DEFAULT_MANIFEST_FILE.as_bytes());
     match res {
         Ok(_) => {}
-        Err(_) => return Err(format!("Failed to write to manifest file {destination}")),
+        Err(_) => {
+            let msg = format!("Failed to write to manifest file {destination}");
+            return Err(ManifestError::FailedToGenerateDefaultManifest(msg));
+        }
     }
     Ok(())
 }
 
-fn read_manifest(filename: Option<&String>) -> Result<(String, String), String> {
-    let default = MANIFEST_INPUT_DEFAULT.to_string();
-    let filename = filename.unwrap_or(&default);
-    let file_path = Path::new(&filename);
-
-    if !file_path.exists() {
-        return Err(format!("{filename} does not exist"));
+fn read_manifest<P: AsRef<Path>>(filename: P) -> Result<String, ManifestError> {
+    if !filename.as_ref().exists() {
+        return Err(ManifestError::FileDoesNotExist(
+            filename.as_ref().display().to_string(),
+        ));
     }
 
-    let file = fs::read_to_string(file_path);
+    let file = fs::read_to_string(filename);
     match file {
-        Ok(file) => Ok((filename.clone(), file)),
-        Err(e) => Err(e.to_string()),
+        Ok(file) => Ok(file),
+        Err(e) => Err(ManifestError::FailedToReadManifest(e.to_string())),
     }
 }
 
@@ -287,7 +378,10 @@ fn is_ok_to_clone(manifest_dir: &String, path: &String) -> bool {
     }
 }
 
-fn send_result(sender: &Arc<Mutex<Sender<Result<(), String>>>>, code: &Result<(), String>) {
+fn send_result(
+    sender: &Arc<Mutex<Sender<Result<(), ManifestError>>>>,
+    code: &Result<(), ManifestError>,
+) {
     sender
         .lock()
         .expect("Failed to lock mutex.")
@@ -295,7 +389,7 @@ fn send_result(sender: &Arc<Mutex<Sender<Result<(), String>>>>, code: &Result<()
         .expect("Failed to send result through channel.");
 }
 
-fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), String> {
+fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), ManifestError> {
     for action in project.get_actions() {
         match action {
             ProjectAction::FileAction(ProjectFileAction::LinkFile(src, dest)) => {
@@ -309,11 +403,12 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
                 match res {
                     Ok(_) => {}
                     Err(_) => {
-                        return Err(format!(
+                        let msg = format!(
                             "Failed to create symlink {} to {}",
                             src.to_string_lossy(),
                             dest.to_string_lossy()
-                        ));
+                        );
+                        return Err(ManifestError::FailedToExecuteAction(msg));
                     }
                 }
             }
@@ -325,11 +420,12 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
                 match res {
                     Ok(_) => {}
                     Err(_) => {
-                        return Err(format!(
+                        let msg = format!(
                             "Failed to copy file {} to {}",
                             src.to_string_lossy(),
                             dest.to_string_lossy()
-                        ));
+                        );
+                        return Err(ManifestError::FailedToExecuteAction(msg));
                     }
                 }
             }
@@ -341,11 +437,12 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
                 match res {
                     Ok(_) => {}
                     Err(_) => {
-                        return Err(format!(
+                        let msg = format!(
                             "Failed to copy directory {} to {}",
                             src.to_string_lossy(),
                             dest.to_string_lossy()
-                        ));
+                        );
+                        return Err(ManifestError::FailedToExecuteAction(msg));
                     }
                 }
             }
@@ -355,10 +452,8 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
                 match res {
                     Ok(_) => {}
                     Err(_) => {
-                        return Err(format!(
-                            "Failed to remove directory {}",
-                            dest.to_string_lossy()
-                        ));
+                        let msg = format!("Failed to remove directory {}", dest.to_string_lossy());
+                        return Err(ManifestError::FailedToExecuteAction(msg));
                     }
                 }
             }
@@ -367,11 +462,12 @@ fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), Strin
     Ok(())
 }
 
-pub fn save_file(filename: &String, content: &String) -> Result<(), String> {
+pub fn save_file(filename: &String, content: &String) -> Result<(), ManifestError> {
     let mut file = match File::create(filename) {
         Ok(value) => value,
         Err(_) => {
-            return Err(format!("Failed to create file {filename}"));
+            let msg = format!("Failed to create file {}", filename);
+            return Err(ManifestError::FailedToSaveFile(msg));
         }
     };
 
@@ -379,29 +475,31 @@ pub fn save_file(filename: &String, content: &String) -> Result<(), String> {
     match res {
         Ok(_) => {}
         Err(_) => {
-            return Err(format!("Failed to write to file {filename}"));
+            let msg = format!("Failed to write to file {filename}");
+            return Err(ManifestError::FailedToSaveFile(msg));
         }
     }
     Ok(())
 }
 
-pub fn assert_dependencies() -> Result<(), String> {
+pub fn assert_dependencies() -> Result<(), ManifestError> {
     let output = Command::new("git").arg("--version").output();
 
     match output {
         Ok(_) => Ok(()),
-        Err(_) => Err("Git is not installed".to_string()),
+        Err(_) => Err(ManifestError::MissingDependency("git".to_string())),
     }
 }
 
-fn prepare_file_destination(dest: &PathBuf) -> Result<(), String> {
+fn prepare_file_destination(dest: &PathBuf) -> Result<(), ManifestError> {
     // Delete destination if it exists
     if dest.exists() {
         let res = fs::remove_file(dest);
         match res {
             Ok(_) => {}
             Err(_) => {
-                return Err(format!("Failed to remove file {}", dest.to_string_lossy()));
+                let msg = format!("Failed to remove file {}", dest.display());
+                return Err(ManifestError::FailedToExecuteAction(msg));
             }
         }
     }
@@ -464,10 +562,7 @@ pub fn list_projects_path(manifest: &ManifestInstance, workdir: &Path) -> Vec<St
     output
 }
 
-pub fn get_projects_status(
-    manifest: &ManifestInstance,
-    workdir: &Path,
-) -> Vec<String> {
+pub fn get_projects_status(manifest: &ManifestInstance, workdir: &Path) -> Vec<String> {
     struct ProjectStatus {
         status: String,
         path: String,
@@ -483,7 +578,8 @@ pub fn get_projects_status(
         let status = match vcs.is_modified(&manifest_dir, project) {
             Ok(false) => "".to_string(),
             Ok(true) => " (modified)".to_string(),
-            Err(e) => e,
+            Err(ManifestError::FailedToDetermineIfRepoIsModified(e)) => e,
+            Err(_) => "Unknown error".to_string(),
         };
 
         let repo_abs_path = manifest_dir_path.join(project.get_path());
