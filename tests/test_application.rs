@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod test_application {
-    use colligo::application::{
-        generate_default_manifest, DwlMode, ManifestInstance, ManifestParser,
-    };
+    use colligo::application::{generate_default_manifest, DwlMode, ManifestInstance};
     use colligo::default_manifest::DEFAULT_MANIFEST_FILE;
-    use colligo::xml_parser::XmlParser;
     use git2::Repository;
 
     static HTTPS_URL: &str = "https://gitlab.com/cdsa_rust/colligo.git";
@@ -25,7 +22,8 @@ mod test_application {
     fn get_manifest_file_valid() {
         const MANIFEST_PATH: &str = "./tests/manifest_example.xml";
 
-        let manifest = ManifestInstance::new(Some(&MANIFEST_PATH.to_string())).unwrap();
+        let manifest =
+            ManifestInstance::try_from(MANIFEST_PATH).expect("Failed to create manifest instance");
         assert_eq!(manifest.get_file(), include_str!("manifest_example.xml"));
     }
 
@@ -33,23 +31,12 @@ mod test_application {
     fn get_manifest_file_invalid() {
         const MANIFEST_PATH: &str = "./tests/error_example.xml";
 
-        let manifest = ManifestInstance::new(Some(&MANIFEST_PATH.to_string()));
+        let manifest = ManifestInstance::try_from(MANIFEST_PATH);
 
         match manifest {
             Err(_) => { /* Ok */ }
-            _ => panic!("Expected ExitCode::ManifestInvalid"),
+            _ => panic!("Expected an error"),
         }
-    }
-
-    #[test]
-    fn get_manifest_file_default() {
-        const MANIFEST_PATH: &str = "./manifest.xml";
-        std::fs::copy("./tests/manifest.xml", MANIFEST_PATH).unwrap();
-
-        let manifest = ManifestInstance::new(None).unwrap();
-
-        assert_eq!(manifest.get_file(), include_str!("manifest.xml"));
-        std::fs::remove_file(MANIFEST_PATH).unwrap();
     }
 
     #[test]
@@ -61,13 +48,10 @@ mod test_application {
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
         // Test
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
@@ -148,13 +132,10 @@ mod test_application {
         std::fs::File::create(temp_dir.path().join("cp_README.md")).expect("Failed to create file");
 
         // Test
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
@@ -239,17 +220,12 @@ mod test_application {
             .output();
 
         // Test
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
-        let pinned = manifest
-            .pin(parser.as_ref())
-            .expect("Unable to pin manifest");
+        let pinned = manifest.pin().expect("Unable to pin manifest");
 
         // Assert
         const COMMIT_V0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
@@ -266,13 +242,10 @@ mod test_application {
         let manifest = temp_dir.path().join("manifest.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
@@ -310,21 +283,21 @@ mod test_application {
         let manifest = temp_dir.path().join("manifest.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
             .expect("Unable to sync manifest");
 
         // Modify the README in dev/
-        std::fs::write(temp_dir.path().join("dev/README.md"), "This is a new README")
-            .expect("Unable to modify README");
+        std::fs::write(
+            temp_dir.path().join("dev/README.md"),
+            "This is a new README",
+        )
+        .expect("Unable to modify README");
 
         // Sync again without force option
         let result = manifest.sync(&DwlMode::HTTPS, false, false, false);
@@ -332,8 +305,8 @@ mod test_application {
         // Assert we get an error
         match result {
             Err(e) => assert_eq!(
-                e,
-                "\n\n[./dev] repository is dirty, please commit or stash your changes\n"
+                e.to_string(),
+                "Failed to sync manifest: \n\n[./dev] repository is dirty, please commit or stash your changes\n"
             ),
             _ => panic!("Expected an error"),
         }
@@ -347,13 +320,10 @@ mod test_application {
         let manifest = temp_dir.path().join("manifest.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
@@ -378,13 +348,10 @@ mod test_application {
         let manifest = temp_dir.path().join("manifest.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
@@ -417,13 +384,10 @@ mod test_application {
         let manifest = temp_dir.path().join("manifest_example.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
 
-        let mut manifest = ManifestInstance::new(Some(&manifest.display().to_string()))
-            .expect("Unable to get manifest file");
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
 
-        let parser: Box<dyn ManifestParser> = Box::new(XmlParser::new());
-        manifest
-            .parse(parser.as_ref())
-            .expect("Unable to parse manifest");
+        manifest.parse().expect("Unable to parse manifest");
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
