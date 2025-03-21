@@ -3,39 +3,50 @@ run-name: Sanity check
 on:
   pull_request:
 
+env:
+  GIT_SHA: ${{ github.sha }}
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
-      - run: cargo fmt --all --check
+
+      - name: Install fmt
+        run: rustup component add rustfmt
+
+      - name: Check format
+        run: cargo fmt --all --check
 
   clippy:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
-      - run: cargo clippy -- -Dwarnings
+
+      - name: Install clippy
+        run: rustup component add clippy
+
+      - name: Clippy check
+        run: cargo clippy -- -Dwarnings
 
   test:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
-      - run: cargo test --all
+
+      - name: Run unit tests
+        run: cargo test --all
 
   version:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
         with:
