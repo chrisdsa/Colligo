@@ -5,14 +5,19 @@ on: workflow_dispatch
 permissions:
   contents: write
 
+env:
+  GIT_SHA: ${{ github.sha }}
+
 jobs:
   create_linux_executable:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install target
+        run: rustup target add x86_64-unknown-linux-gnu
 
       - name: Build
         run: cargo build --target x86_64-unknown-linux-gnu --release
@@ -31,10 +36,16 @@ jobs:
   create_windows_executable:
     runs-on: ubuntu-latest
     container:
-      image: chrisdsa/rust_mingw:1.68-0.1.0
-      options: --user 1001
+      image: rust:latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: apt update && apt install -y wine libwine mingw-w64
+
+      - name: Install target
+        run: rustup target add x86_64-pc-windows-gnu
+
       - name: Build
         run: cargo build --target x86_64-pc-windows-gnu --release
 

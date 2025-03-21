@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Now using Tokio task instead of threads.
 - Improved the code.
+- Update rust version in CI.
 
 ### Fixed
 
