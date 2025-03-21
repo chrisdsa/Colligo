@@ -39,8 +39,8 @@ mod test_application {
         }
     }
 
-    #[test]
-    fn sync_empty_project_ssh() {
+    #[tokio::test]
+    async fn sync_empty_project_ssh() {
         // Setup
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -55,6 +55,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Assert
@@ -103,8 +104,8 @@ mod test_application {
         );
     }
 
-    #[test]
-    fn sync_project_on_old_commit() {
+    #[tokio::test]
+    async fn sync_project_on_old_commit() {
         // Setup
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -139,6 +140,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Assert
@@ -184,8 +186,8 @@ mod test_application {
         );
     }
 
-    #[test]
-    fn pin_manifest() {
+    #[tokio::test]
+    async fn pin_manifest() {
         // Setup
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -225,7 +227,7 @@ mod test_application {
 
         manifest.parse().expect("Unable to parse manifest");
 
-        let pinned = manifest.pin().expect("Unable to pin manifest");
+        let pinned = manifest.pin().await.expect("Unable to pin manifest");
 
         // Assert
         const COMMIT_V0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
@@ -234,8 +236,8 @@ mod test_application {
         assert_eq!(pinned.get_projects()[2].get_revision(), COMMIT_V0);
     }
 
-    #[test]
-    fn sync_with_force_option() {
+    #[tokio::test]
+    async fn sync_with_force_option() {
         // Setup: Sync project
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -249,6 +251,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Save current README in dev/
@@ -265,6 +268,7 @@ mod test_application {
         // Sync again with force option
         manifest
             .sync(&DwlMode::HTTPS, false, false, true)
+            .await
             .expect("Unable to sync manifest");
 
         // Assert: README in dev/ should be the same as the original README
@@ -275,8 +279,8 @@ mod test_application {
         );
     }
 
-    #[test]
-    fn sync_when_source_are_modified() {
+    #[tokio::test]
+    async fn sync_when_source_are_modified() {
         // Setup: Sync project
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -290,6 +294,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Modify the README in dev/
@@ -300,20 +305,20 @@ mod test_application {
         .expect("Unable to modify README");
 
         // Sync again without force option
-        let result = manifest.sync(&DwlMode::HTTPS, false, false, false);
+        let result = manifest.sync(&DwlMode::HTTPS, false, false, false).await;
 
         // Assert we get an error
         match result {
             Err(e) => assert_eq!(
                 e.to_string(),
-                "Failed to sync manifest: \n\n[./dev] repository is dirty, please commit or stash your changes\n"
+                "Failed to sync manifest: \n\nFailed to checkout repository: ./dev, repository is dirty, please commit or stash your changes\n"
             ),
             _ => panic!("Expected an error"),
         }
     }
 
-    #[test]
-    fn sync_when_new_file_is_added() {
+    #[tokio::test]
+    async fn sync_when_new_file_is_added() {
         // Setup: Sync project
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -327,6 +332,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Write a new file in dev/
@@ -334,14 +340,14 @@ mod test_application {
             .expect("Unable to modify README");
 
         // Sync again with force option
-        let result = manifest.sync(&DwlMode::HTTPS, false, false, true);
+        let result = manifest.sync(&DwlMode::HTTPS, false, false, true).await;
 
         // Assert we get no error
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn sync_with_delete_repository_action() {
+    #[tokio::test]
+    async fn sync_with_delete_repository_action() {
         // Setup: Sync project
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_del_repo.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -355,6 +361,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Assert linkfile and copyfile
@@ -376,8 +383,8 @@ mod test_application {
         assert!(!std::path::Path::new(&temp_dir.path().join("no_revision")).exists());
     }
 
-    #[test]
-    fn sync_with_copydir_action() {
+    #[tokio::test]
+    async fn sync_with_copydir_action() {
         // Setup: Sync project
         const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_copydir.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
@@ -391,6 +398,7 @@ mod test_application {
 
         manifest
             .sync(&DwlMode::HTTPS, false, false, false)
+            .await
             .expect("Unable to sync manifest");
 
         // Assert copydir action

@@ -10,6 +10,8 @@ log = "0.4"
 pathdiff = "0.2.1"
 indicatif = "0.17.7"
 regex = "1.10.3"
+tokio = { version = "1.44", features = ["rt-multi-thread", "sync", "rt", "macros", "time", "process", "io-std", "io-util"] }
+async-trait = "0.1"
 
 [dependencies.simple_logger]
 version = "4.2.0"

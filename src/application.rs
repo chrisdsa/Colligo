@@ -3,16 +3,14 @@ use crate::project::{Project, ProjectAction, ProjectFileAction};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::VecDeque;
 use std::fmt::Display;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::mpsc::channel;
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
-use std::{fs, thread};
+use tokio::sync::mpsc::{channel, Sender};
 
 use crate::git_version_control::GitVersionControl;
 #[cfg(target_os = "windows")]
@@ -38,6 +36,7 @@ pub const HTTPS: &str = "https";
 pub const LIST: &str = "list";
 pub const STATUS: &str = "status";
 
+#[derive(Clone)]
 pub enum DwlMode {
     HTTPS,
     SSH,
@@ -55,11 +54,12 @@ pub trait ManifestParser {
 /// The manifest file path is used to avoid changing the working directory which may results in
 /// unexpected behavior when multiple threads are used.
 /// When using the lightweight option, the revision MUST be a branch or a tag. Commit ID are not supported.
-pub trait VersionControl {
+#[async_trait::async_trait]
+pub trait VersionControl: Send + Sync {
     /// Clone a project from a URI to a path.
-    fn clone<P: AsRef<Path>>(
+    async fn clone(
         &self,
-        manifest_dir: P,
+        manifest_dir: &Path,
         project: &Project,
         mode: &DwlMode,
         pb: Option<&ProgressBar>,
@@ -67,25 +67,25 @@ pub trait VersionControl {
     ) -> Result<(), ManifestError>;
 
     /// Update a project to a specific revision.
-    fn checkout<P: AsRef<Path>>(
+    async fn checkout(
         &self,
-        manifest_dir: P,
+        manifest_dir: &Path,
         project: &Project,
         pb: Option<&ProgressBar>,
         force: bool,
     ) -> Result<(), ManifestError>;
 
     /// Status of a project.
-    fn get_commit_id<P: AsRef<Path>>(
+    async fn get_commit_id(
         &self,
-        manifest_dir: P,
+        manifest_dir: &Path,
         project: &Project,
     ) -> Result<String, ManifestError>;
 
     /// Return true if the project has modified file(s).
-    fn is_modified<P: AsRef<Path>>(
+    async fn is_modified(
         &self,
-        manifest_dir: P,
+        manifest_dir: &Path,
         project: &Project,
     ) -> Result<bool, ManifestError>;
 }
@@ -200,7 +200,7 @@ impl ManifestInstance {
         Ok(())
     }
 
-    pub fn sync(
+    pub async fn sync(
         &self,
         mode: &DwlMode,
         lightweight: bool,
@@ -210,7 +210,7 @@ impl ManifestInstance {
         // Prepare progress bar
         let multi_progress = MultiProgress::new();
         let style = ProgressStyle::default_bar()
-            .template("{spinner:.white} [{elapsed_precise}] {bar:40} {pos:>3}/{len:3} {msg}")
+            .template("[{elapsed_precise}] {bar:40} {pos:>3}/{len:3} {msg}")
             .expect("Failed to create progress bar style")
             .progress_chars("##-");
 
@@ -229,57 +229,58 @@ impl ManifestInstance {
         }
 
         // Create channel to save result
-        let (tx, rx) = channel();
-        let tx = Arc::new(Mutex::new(tx));
+        let (tx, mut rx) = channel(255);
+
+        // Handle
+        let mut _handles = Vec::new();
 
         // Spawn a thread for each project
-        thread::scope(|s| {
-            for project in self.projects.iter() {
-                let tx = Arc::clone(&tx);
+        for project in self.projects.iter() {
+            let tx = tx.clone();
+            let pb = progress_bars.pop().expect("Failed to get progress bar");
+            let dir = self.get_manifest_dir();
+            let project = project.clone();
+            let mode = mode.clone();
 
-                let pb = progress_bars.pop().expect("Failed to get progress bar");
+            let handle = tokio::task::spawn(async move {
+                let mut result = Ok(());
 
-                s.spawn(move || {
-                    let dir = self.get_manifest_dir();
-                    let mut result = Ok(());
+                let vcs = GitVersionControl::new();
 
-                    let vcs = GitVersionControl::new();
+                if is_ok_to_clone(&dir, project.get_path()) {
+                    result = vcs
+                        .clone(&dir, &project, &mode, pb.as_ref(), lightweight)
+                        .await;
+                    send_result(&tx, result.clone()).await;
+                }
 
-                    if is_ok_to_clone(&dir, project.get_path()) {
-                        result = vcs.clone(&dir, project, mode, pb.as_ref(), lightweight);
-                        send_result(&tx, &result);
-                    }
+                if result.is_ok() {
+                    result = vcs.checkout(&dir, &project, pb.as_ref(), force).await;
+                    send_result(&tx, result.clone()).await;
+                }
 
-                    if result.is_ok() {
-                        result = vcs.checkout(&dir, project, pb.as_ref(), force);
-                        send_result(&tx, &result);
-                    }
+                if result.is_ok() {
+                    result = execute_actions(&dir, &project);
+                    send_result(&tx, result.clone()).await;
+                }
 
-                    if result.is_ok() {
-                        result = execute_actions(&dir, project);
-                        send_result(&tx, &result);
-                    }
+                if let Some(pb) = pb {
+                    pb.finish();
+                }
+            });
 
-                    if let Some(pb) = pb {
-                        pb.finish();
-                    }
-                });
-            }
-            drop(tx);
-        });
+            _handles.push(handle);
+        }
+        drop(tx);
 
+        // Wait for task to finish
         // Save error messages if any
-        let errors: Vec<String> = rx
-            .iter()
-            .filter_map(|code| match code {
-                Err(ManifestError::FailedToExecuteAction(e))
-                | Err(ManifestError::FailedToCloneRepository(e))
-                | Err(ManifestError::FailedToCheckoutRepository(e))
-                | Err(ManifestError::FailedToGetCommitId(e))
-                | Err(ManifestError::FailedToDetermineIfRepoIsModified(e)) => Some(e),
-                Ok(_) | Err(_) => None,
-            })
-            .collect();
+        let mut errors: Vec<String> = Vec::new();
+        while let Some(error) = rx.recv().await {
+            if let Err(e) = error {
+                errors.push(format!("{}", e))
+            }
+        }
 
         // If there is any error, return it
         if !errors.is_empty() {
@@ -298,12 +299,13 @@ impl ManifestInstance {
         Ok(())
     }
 
-    pub fn pin(&self) -> Result<Self, ManifestError> {
+    pub async fn pin(&self) -> Result<Self, ManifestError> {
         let mut projects: Vec<Project> = Vec::new();
         let vcs = GitVersionControl::new();
+        let manifest_dir = self.get_manifest_dir();
 
         for project in self.projects.iter() {
-            let commit_id = vcs.get_commit_id(self.get_manifest_dir(), project)?;
+            let commit_id = vcs.get_commit_id(manifest_dir.as_path(), project).await?;
             let pinned_project = project.pin(commit_id);
             projects.push(pinned_project);
         }
@@ -318,12 +320,12 @@ impl ManifestInstance {
         })
     }
 
-    fn get_manifest_dir(&self) -> String {
+    fn get_manifest_dir(&self) -> PathBuf {
         let file_path = Path::new(&self.filename);
         let abs_path = file_path.canonicalize().unwrap_or("./".into());
         let workdir = abs_path.parent().unwrap_or("./".as_ref());
 
-        workdir.to_string_lossy().to_string()
+        workdir.to_path_buf()
     }
 }
 
@@ -364,8 +366,8 @@ fn read_manifest<P: AsRef<Path>>(filename: P) -> Result<String, ManifestError> {
 }
 
 // Ok to clone if the directory does not exist or is empty.
-fn is_ok_to_clone(manifest_dir: &String, path: &String) -> bool {
-    let dir = Path::new(manifest_dir).join(path);
+fn is_ok_to_clone(manifest_dir: &Path, path: &String) -> bool {
+    let dir = manifest_dir.join(path);
 
     if dir.exists() && dir.is_dir() {
         let res = dir.read_dir();
@@ -378,23 +380,19 @@ fn is_ok_to_clone(manifest_dir: &String, path: &String) -> bool {
     }
 }
 
-fn send_result(
-    sender: &Arc<Mutex<Sender<Result<(), ManifestError>>>>,
-    code: &Result<(), ManifestError>,
-) {
+async fn send_result(sender: &Sender<Result<(), ManifestError>>, code: Result<(), ManifestError>) {
     sender
-        .lock()
-        .expect("Failed to lock mutex.")
         .send(code.clone())
+        .await
         .expect("Failed to send result through channel.");
 }
 
-fn execute_actions(manifest_dir: &String, project: &Project) -> Result<(), ManifestError> {
+fn execute_actions(manifest_dir: &Path, project: &Project) -> Result<(), ManifestError> {
     for action in project.get_actions() {
         match action {
             ProjectAction::FileAction(ProjectFileAction::LinkFile(src, dest)) => {
-                let dest = Path::new(manifest_dir).join(dest);
-                let src = Path::new(manifest_dir).join(project.get_path()).join(src);
+                let dest = manifest_dir.join(dest);
+                let src = manifest_dir.join(project.get_path()).join(src);
 
                 let relative_src = get_relative_path_for_symlink(&src, &dest);
                 prepare_file_destination(&dest)?;
@@ -562,7 +560,7 @@ pub fn list_projects_path(manifest: &ManifestInstance, workdir: &Path) -> Vec<St
     output
 }
 
-pub fn get_projects_status(manifest: &ManifestInstance, workdir: &Path) -> Vec<String> {
+pub async fn get_projects_status(manifest: &ManifestInstance, workdir: &Path) -> Vec<String> {
     struct ProjectStatus {
         status: String,
         path: String,
@@ -575,7 +573,7 @@ pub fn get_projects_status(manifest: &ManifestInstance, workdir: &Path) -> Vec<S
     let vcs = GitVersionControl::new();
 
     for project in manifest.get_projects() {
-        let status = match vcs.is_modified(&manifest_dir, project) {
+        let status = match vcs.is_modified(&manifest_dir, project).await {
             Ok(false) => "".to_string(),
             Ok(true) => " (modified)".to_string(),
             Err(ManifestError::FailedToDetermineIfRepoIsModified(e)) => e,
