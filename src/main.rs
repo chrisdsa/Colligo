@@ -10,6 +10,24 @@ use std::env;
 const DEBUG_OPTION: &str = "debug";
 const APP_VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"), "-", env!("GIT_SHA"));
 
+struct UserMessage {
+    quiet: bool,
+}
+
+impl UserMessage {
+    fn new(quiet: bool) -> Self {
+        Self {
+            quiet
+        }
+    }
+
+    fn message(&self, msg: String) {
+        if !self.quiet {
+            println!("{}", msg);
+        }
+    }
+}
+
 fn main() {
     // Generate manifest option
     let generate_manifest = Arg::new(GENERATE_MANIFEST)
@@ -118,12 +136,13 @@ fn main() {
         .expect("Failed to initialize logger");
 
     let quiet = *matches.get_one::<bool>(QUIET).unwrap_or(&false);
+    let user = UserMessage::new(quiet);
 
     let force = *matches.get_one::<bool>(FORCE).unwrap_or(&false);
 
     // Generate manifest
     if let Some(path) = matches.get_one::<String>(GENERATE_MANIFEST) {
-        conditional_println(quiet, format!("Generate manifest file: {}", path));
+        user.message(format!("Generate manifest file: {}", path));
         if let Err(error_msg) = generate_default_manifest(path) {
             eprintln!("{}", error_msg);
             std::process::exit(1);
@@ -151,8 +170,7 @@ fn main() {
     };
 
     // Parse manifest file. Currently only support XML format.
-    conditional_println(
-        quiet,
+    user.message(
         format!(
             "Parsing manifest file: {}",
             manifest.get_filename().display()
@@ -173,17 +191,17 @@ fn main() {
     if let Some(true) = matches.get_one::<bool>(SYNC) {
         let light = *matches.get_one::<bool>(LIGHT).unwrap_or(&false);
 
-        conditional_println(quiet, "Synchronize all projects".to_string());
+        user.message("Synchronize all projects".to_string());
         if let Err(error_msg) = manifest.sync(&dwl_mode, light, quiet, force) {
             eprintln!("{}", error_msg);
             std::process::exit(1);
         }
-        conditional_println(quiet, "Synchronization complete".to_string());
+        user.message("Synchronization complete".to_string());
     }
 
     // Pin manifest
     if let Some(path) = matches.get_one::<String>(PIN) {
-        conditional_println(quiet, "Pin manifest".to_string());
+        user.message("Pin manifest".to_string());
         let pinned = match manifest.pin() {
             Ok(pinned) => pinned,
             Err(error_msg) => {
@@ -214,11 +232,5 @@ fn main() {
         for status in all_status {
             println!("{}", status);
         }
-    }
-}
-
-fn conditional_println(quiet: bool, message: String) {
-    if !quiet {
-        println!("{}", message);
     }
 }
