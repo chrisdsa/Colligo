@@ -16,9 +16,7 @@ struct UserMessage {
 
 impl UserMessage {
     fn new(quiet: bool) -> Self {
-        Self {
-            quiet
-        }
+        Self { quiet }
     }
 
     fn message(&self, msg: String) {
@@ -28,7 +26,8 @@ impl UserMessage {
     }
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
     // Generate manifest option
     let generate_manifest = Arg::new(GENERATE_MANIFEST)
         .long(GENERATE_MANIFEST)
@@ -170,12 +169,10 @@ fn main() {
     };
 
     // Parse manifest file. Currently only support XML format.
-    user.message(
-        format!(
-            "Parsing manifest file: {}",
-            manifest.get_filename().display()
-        ),
-    );
+    user.message(format!(
+        "Parsing manifest file: {}",
+        manifest.get_filename().display()
+    ));
     if let Err(error_msg) = manifest.parse() {
         eprintln!("{}", error_msg);
         std::process::exit(1);
@@ -192,7 +189,7 @@ fn main() {
         let light = *matches.get_one::<bool>(LIGHT).unwrap_or(&false);
 
         user.message("Synchronize all projects".to_string());
-        if let Err(error_msg) = manifest.sync(&dwl_mode, light, quiet, force) {
+        if let Err(error_msg) = manifest.sync(&dwl_mode, light, quiet, force).await {
             eprintln!("{}", error_msg);
             std::process::exit(1);
         }
@@ -202,7 +199,7 @@ fn main() {
     // Pin manifest
     if let Some(path) = matches.get_one::<String>(PIN) {
         user.message("Pin manifest".to_string());
-        let pinned = match manifest.pin() {
+        let pinned = match manifest.pin().await {
             Ok(pinned) => pinned,
             Err(error_msg) => {
                 eprintln!("{}", error_msg);
@@ -228,7 +225,7 @@ fn main() {
     // Status
     if let Some(true) = matches.get_one::<bool>(STATUS) {
         let workdir = env::current_dir().expect("Unable to get current directory");
-        let all_status = get_projects_status(&manifest, &workdir);
+        let all_status = get_projects_status(&manifest, &workdir).await;
         for status in all_status {
             println!("{}", status);
         }

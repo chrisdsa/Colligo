@@ -20,6 +20,7 @@ pub enum ProjectAction {
     DeleteProject,
 }
 
+#[derive(Clone)]
 pub struct Project {
     uri: String,
     name: String,
