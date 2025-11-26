@@ -86,7 +86,7 @@ impl ManifestParser for XmlParser {
     }
 }
 
-fn parse_xml_file(file: &str) -> Result<Document, ManifestError> {
+fn parse_xml_file(file: &'_ str) -> Result<Document<'_>, ManifestError> {
     let xml = Document::parse(file);
     let parsed_xml;
     match xml {

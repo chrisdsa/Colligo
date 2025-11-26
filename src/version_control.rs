@@ -1,4 +1,4 @@
-use crate::application::{DwlMode, ManifestError, VersionControl};
+use crate::application::{DwlMode, ManifestError};
 use crate::project::Project;
 use indicatif::ProgressBar;
 use log::debug;
@@ -13,27 +13,22 @@ const PROGRESS_REFRESH_RATE_MS: u64 = 100;
 
 pub struct GitVersionControl {}
 
-impl GitVersionControl {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 impl Default for GitVersionControl {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[async_trait::async_trait]
-impl VersionControl for GitVersionControl {
-    async fn clone(
+impl GitVersionControl {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub async fn init(
         &self,
         manifest_dir: &Path,
         project: &Project,
         mode: &DwlMode,
-        pb: Option<&ProgressBar>,
-        lightweight: bool,
     ) -> Result<(), ManifestError> {
         let url = match mode {
             DwlMode::HTTPS => project.get_uri_https(),
@@ -43,69 +38,24 @@ impl VersionControl for GitVersionControl {
         let repo_path = manifest_dir.join(project.get_path());
 
         debug!(
-            "Cloning {} into {}",
+            "Initializing {} into {}",
             project.get_name(),
             repo_path.display()
         );
 
-        let mut command = Command::new("git");
+        init_repository(&repo_path).await?;
+        init_origin(&repo_path, &url).await?;
 
-        let args: Vec<&str> = if lightweight {
-            [
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                project.get_revision().as_str(),
-                "--single-branch",
-                "--progress",
-                url.as_str(),
-                project.get_path().as_str(),
-            ]
-            .to_vec()
-        } else {
-            [
-                "clone",
-                url.as_str(),
-                project.get_path().as_str(),
-                "--progress",
-            ]
-            .to_vec()
-        };
-
-        command
-            .current_dir(manifest_dir)
-            .args(args)
-            .env("GIT_FLUSH", "1")
-            .stderr(Stdio::piped())
-            .stdout(Stdio::null());
-
-        let display_status = [
-            format!("{} cloning", project.get_path()),
-            format!("{} complete", project.get_path()),
-            format!("{} ERROR", project.get_path()),
-        ];
-
-        match process_command(&mut command, pb, &display_status).await {
-            Ok(_) => {}
-            Err(e) => {
-                let msg = format!("{}\n{}\n", project.get_path(), e);
-                return Err(ManifestError::FailedToCloneRepository(msg));
-            }
-        }
-
-        if let Some(pb) = pb {
-            pb.finish();
-        }
         Ok(())
     }
 
-    async fn checkout(
+    pub async fn checkout(
         &self,
         manifest_dir: &Path,
         project: &Project,
         pb: Option<&ProgressBar>,
         force: bool,
+        lightweight: bool,
     ) -> Result<(), ManifestError> {
         let repo_path = manifest_dir.join(project.get_path());
 
@@ -116,10 +66,12 @@ impl VersionControl for GitVersionControl {
             project.get_revision()
         );
 
+        let args = get_fetch_args(&repo_path, lightweight, project.get_revision()).await?;
+
         let mut command = Command::new("git");
         command
             .current_dir(&repo_path)
-            .args(["fetch", "--prune", "--progress"])
+            .args(args)
             .stderr(Stdio::piped())
             .stdout(Stdio::null());
 
@@ -138,6 +90,8 @@ impl VersionControl for GitVersionControl {
 
         let args = if force {
             ["checkout", project.get_revision(), "--progress", "--force"].to_vec()
+        } else if lightweight {
+            ["checkout", "FETCH_HEAD", "--progress"].to_vec()
         } else {
             ["checkout", project.get_revision(), "--progress"].to_vec()
         };
@@ -221,7 +175,7 @@ impl VersionControl for GitVersionControl {
         Ok(())
     }
 
-    async fn get_commit_id(
+    pub async fn get_commit_id(
         &self,
         manifest_dir: &Path,
         project: &Project,
@@ -254,7 +208,7 @@ impl VersionControl for GitVersionControl {
         }
     }
 
-    async fn is_modified(
+    pub async fn is_modified(
         &self,
         manifest_dir: &Path,
         project: &Project,
@@ -386,5 +340,120 @@ async fn is_branch<P: AsRef<Path>>(manifest_dir: P, project: &Project) -> bool {
             message.contains("On branch")
         }
         Err(_) => false,
+    }
+}
+
+async fn init_repository(path: &Path) -> Result<(), ManifestError> {
+    // Create directory if it does not exist
+    if !path.exists() {
+        tokio::fs::create_dir_all(path)
+            .await
+            .map_err(|e| ManifestError::FailedToInitialize(e.to_string()))?;
+    }
+    // Init git repository
+    let out = Command::new("git")
+        .current_dir(path)
+        .args(["init", "--quiet"])
+        .output()
+        .await
+        .map_err(|e| ManifestError::FailedToInitialize(e.to_string()))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(ManifestError::FailedToInitialize(
+            "git init failed".to_string(),
+        ))
+    }
+}
+
+async fn init_origin(path: &Path, url: &str) -> Result<(), ManifestError> {
+    // check if origin exists
+    let exists = Command::new("git")
+        .current_dir(path)
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .map_err(|e| ManifestError::FailedToInitialize(e.to_string()))?;
+
+    if exists {
+        // update existing origin
+        let out = Command::new("git")
+            .current_dir(path)
+            .args(["remote", "set-url", "origin", url])
+            .output()
+            .await
+            .map_err(|e| ManifestError::FailedToInitialize(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(ManifestError::FailedToInitialize(
+                "git remote set-url failed".to_string(),
+            ))
+        }
+    } else {
+        // add new origin
+        let out = Command::new("git")
+            .current_dir(path)
+            .args(["remote", "add", "origin", url])
+            .output()
+            .await
+            .map_err(|e| ManifestError::FailedToInitialize(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(ManifestError::FailedToInitialize(
+                "git remote add failed".to_string(),
+            ))
+        }
+    }
+}
+
+async fn get_fetch_args(
+    manifest_dir: &Path,
+    lightweight: bool,
+    revision: &str,
+) -> Result<Vec<String>, ManifestError> {
+    // Is shallow?
+    let out = Command::new("git")
+        .current_dir(manifest_dir)
+        .args(["rev-parse", "--is-shallow-repository"])
+        .output()
+        .await
+        .map_err(|e| ManifestError::FailedToCheckoutRepository(e.to_string()))?;
+
+    if !out.status.success() {
+        return Err(ManifestError::FailedToCheckoutRepository(
+            "git rev-parse failed".to_string(),
+        ));
+    }
+
+    let is_shallow = String::from_utf8_lossy(&out.stdout)
+        .to_string()
+        .contains("true");
+
+    // Set args
+    if lightweight {
+        Ok(vec![
+            "fetch".to_string(),
+            "--prune".to_string(),
+            "--depth".to_string(),
+            "1".to_string(),
+            "origin".to_string(),
+            revision.to_string(),
+        ])
+    } else if is_shallow {
+        Ok(vec![
+            "fetch".to_string(),
+            "--prune".to_string(),
+            "--unshallow".to_string(),
+            "origin".to_string(),
+        ])
+    } else {
+        Ok(vec![
+            "fetch".to_string(),
+            "--prune".to_string(),
+            "origin".to_string(),
+        ])
     }
 }
