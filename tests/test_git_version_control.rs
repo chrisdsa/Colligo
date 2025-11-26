@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod test_git_version_control {
 
-    use colligo::application::{DwlMode, VersionControl};
-    use colligo::git_version_control::GitVersionControl;
+    use colligo::application::DwlMode;
     use colligo::project::Project;
+    use colligo::version_control::GitVersionControl;
     use git2::Repository;
 
     #[tokio::test]
@@ -20,10 +20,12 @@ mod test_git_version_control {
         );
 
         let git = GitVersionControl::new();
+        git.init(temp_dir.path(), &project, &DwlMode::HTTPS)
+            .await
+            .expect("init failed");
         let result = git
-            .clone(temp_dir.path(), &project, &DwlMode::HTTPS, None, false)
+            .checkout(temp_dir.path(), &project, None, false, false)
             .await;
-        let _ = git.checkout(temp_dir.path(), &project, None, false).await;
 
         assert!(result.is_ok());
         let repo = Repository::open(temp_dir.path()).expect("Unable to open repository");
@@ -32,7 +34,7 @@ mod test_git_version_control {
     }
 
     #[tokio::test]
-    async fn clone_project_lightweight_ssh() {
+    async fn clone_project_lightweight_https() {
         const PROJECT_URI: &str = "gitlab.com";
         const PROJECT_NAME: &str = "cdsa_rust/manifest";
         const PROJECT_REVISION: &str = "v0.0.0";
@@ -46,10 +48,13 @@ mod test_git_version_control {
         );
 
         let git = GitVersionControl::new();
+        git.init(temp_dir.path(), &project, &DwlMode::HTTPS)
+            .await
+            .expect("init failed");
         let result = git
-            .clone(temp_dir.path(), &project, &DwlMode::HTTPS, None, true)
+            .checkout(temp_dir.path(), &project, None, false, true)
             .await;
-
+        println!("{:?}", result);
         assert!(result.is_ok());
         let repo = Repository::open(temp_dir.path()).expect("Unable to open repository");
         let head = repo.head().expect("Unable to get head");
@@ -78,8 +83,11 @@ mod test_git_version_control {
         );
 
         let git = GitVersionControl::new();
+        git.init(temp_dir.path(), &project, &DwlMode::HTTPS)
+            .await
+            .expect("failed to init repo");
         let result = git
-            .clone(temp_dir.path(), &project, &DwlMode::HTTPS, None, false)
+            .checkout(temp_dir.path(), &project, None, false, false)
             .await;
         assert!(result.is_ok());
 
@@ -90,7 +98,9 @@ mod test_git_version_control {
             temp_dir.path().display().to_string(),
         );
 
-        let result = git.checkout(temp_dir.path(), &project, None, false).await;
+        let result = git
+            .checkout(temp_dir.path(), &project, None, false, false)
+            .await;
         assert!(result.is_ok());
     }
 }

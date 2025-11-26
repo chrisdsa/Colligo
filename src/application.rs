@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::sync::mpsc::{channel, Sender};
 
-use crate::git_version_control::GitVersionControl;
+use crate::version_control::GitVersionControl;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::symlink_file as symlink;
 
@@ -55,7 +55,7 @@ pub trait ManifestParser {
 /// unexpected behavior when multiple threads are used.
 /// When using the lightweight option, the revision MUST be a branch or a tag. Commit ID are not supported.
 #[async_trait::async_trait]
-pub trait VersionControl: Send + Sync {
+pub trait XVersionControl: Send + Sync {
     /// Clone a project from a URI to a path.
     async fn clone(
         &self,
@@ -92,6 +92,7 @@ pub trait VersionControl: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ManifestError {
+    FailedToInitialize(String),
     FailedToGetAbsolutePath(String),
     FileDoesNotExist(String),
     FailedToReadManifest(String),
@@ -99,7 +100,6 @@ pub enum ManifestError {
     FailedToGenerateDefaultManifest(String),
     FailedToComposeManifest(String),
     FailedToExecuteAction(String),
-    FailedToCloneRepository(String),
     FailedToCheckoutRepository(String),
     FailedToGetCommitId(String),
     FailedToDetermineIfRepoIsModified(String),
@@ -111,6 +111,9 @@ pub enum ManifestError {
 impl Display for ManifestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ManifestError::FailedToInitialize(e) => {
+                write!(f, "Failed to initialize repository: {}", e)
+            }
             ManifestError::FailedToGetAbsolutePath(e) => {
                 write!(f, "Failed to get absolute path of {}", e)
             }
@@ -128,9 +131,6 @@ impl Display for ManifestError {
             }
             ManifestError::FailedToExecuteAction(e) => {
                 write!(f, "Failed to execute action: {}", e)
-            }
-            ManifestError::FailedToCloneRepository(e) => {
-                write!(f, "Failed to clone repository: {}", e)
             }
             ManifestError::FailedToCheckoutRepository(e) => {
                 write!(f, "Failed to checkout repository: {}", e)
@@ -248,14 +248,14 @@ impl ManifestInstance {
                 let vcs = GitVersionControl::new();
 
                 if is_ok_to_clone(&dir, project.get_path()) {
-                    result = vcs
-                        .clone(&dir, &project, &mode, pb.as_ref(), lightweight)
-                        .await;
+                    result = vcs.init(&dir, &project, &mode).await;
                     send_result(&tx, result.clone()).await;
                 }
 
                 if result.is_ok() {
-                    result = vcs.checkout(&dir, &project, pb.as_ref(), force).await;
+                    result = vcs
+                        .checkout(&dir, &project, pb.as_ref(), force, lightweight)
+                        .await;
                     send_result(&tx, result.clone()).await;
                 }
 
