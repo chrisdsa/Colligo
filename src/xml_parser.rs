@@ -103,7 +103,7 @@ fn parse_xml_file(file: &'_ str) -> Result<Document<'_>, ManifestError> {
 
 fn get_name(node: &Node) -> Result<String, ManifestError> {
     match node.attribute("name") {
-        Some(value) => Ok(value.to_string()),
+        Some(value) => Ok(value.trim().to_string()),
         None => {
             let msg = "<project --> name= <-- /> is missing".to_string();
             Err(ManifestError::FailedToParseManifest(msg))
@@ -113,7 +113,7 @@ fn get_name(node: &Node) -> Result<String, ManifestError> {
 
 fn get_path(node: &Node) -> Result<String, ManifestError> {
     match node.attribute("path") {
-        Some(value) => Ok(value.to_string()),
+        Some(value) => Ok(value.trim().to_string()),
         None => {
             let msg = "<project --> path= <-- /> is missing".to_string();
             Err(ManifestError::FailedToParseManifest(msg))
@@ -124,11 +124,15 @@ fn get_path(node: &Node) -> Result<String, ManifestError> {
 fn get_revision(node: &Node, default: &DefaultParameters) -> String {
     node.attribute("revision")
         .unwrap_or(&default.revision)
+        .trim()
         .to_string()
 }
 
 fn get_uri(node: &Node, default: &DefaultParameters) -> String {
-    node.attribute("uri").unwrap_or(&default.uri).to_string()
+    node.attribute("uri")
+        .unwrap_or(&default.uri)
+        .trim()
+        .to_string()
 }
 
 fn add_actions(instance: &mut Project, node: &Node) -> Result<(), ManifestError> {
