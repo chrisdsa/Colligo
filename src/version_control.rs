@@ -66,6 +66,12 @@ impl GitVersionControl {
             project.get_revision()
         );
 
+        // Filter out blob for lightweight clone
+        if lightweight {
+            filter_out_blob(&repo_path).await?;
+        }
+
+        // Fetch
         let args = get_fetch_args(&repo_path, lightweight, project.get_revision()).await?;
 
         let mut command = Command::new("git");
@@ -88,6 +94,7 @@ impl GitVersionControl {
             }
         }
 
+        // Checkout
         let args = if force {
             ["checkout", project.get_revision(), "--progress", "--force"].to_vec()
         } else if lightweight {
@@ -457,6 +464,7 @@ async fn get_fetch_args(
             "--tags".to_string(),
             "--prune".to_string(),
             "--unshallow".to_string(),
+            "--refetch".to_string(),
             "origin".to_string(),
         ])
     } else {
@@ -465,7 +473,38 @@ async fn get_fetch_args(
             "--progress".to_string(),
             "--tags".to_string(),
             "--prune".to_string(),
+            "--refetch".to_string(),
             "origin".to_string(),
         ])
     }
+}
+
+async fn filter_out_blob(repo_path: &Path) -> Result<(), ManifestError> {
+    let out = Command::new("git")
+        .current_dir(repo_path)
+        .args(["config", "remote.origin.promisor", "true"])
+        .output()
+        .await
+        .map_err(|e| ManifestError::FailedToCheckoutRepository(e.to_string()))?;
+
+    if !out.status.success() {
+        return Err(ManifestError::FailedToCheckoutRepository(
+            "git config remote.origin.promisor failed".to_string(),
+        ));
+    }
+
+    let out = Command::new("git")
+        .current_dir(repo_path)
+        .args(["config", "remote.origin.partialclonefilter", "blob:none"])
+        .output()
+        .await
+        .map_err(|e| ManifestError::FailedToCheckoutRepository(e.to_string()))?;
+
+    if !out.status.success() {
+        return Err(ManifestError::FailedToCheckoutRepository(
+            "git config remote.origin.partialclonefilter failed".to_string(),
+        ));
+    }
+
+    Ok(())
 }
