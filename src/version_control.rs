@@ -436,6 +436,7 @@ async fn get_fetch_args(
     if lightweight {
         Ok(vec![
             "fetch".to_string(),
+            "--progress".to_string(),
             "--tags".to_string(),
             "--prune".to_string(),
             "--depth".to_string(),
@@ -446,6 +447,7 @@ async fn get_fetch_args(
     } else if is_shallow {
         Ok(vec![
             "fetch".to_string(),
+            "--progress".to_string(),
             "--tags".to_string(),
             "--prune".to_string(),
             "--unshallow".to_string(),
@@ -454,6 +456,7 @@ async fn get_fetch_args(
     } else {
         Ok(vec![
             "fetch".to_string(),
+            "--progress".to_string(),
             "--tags".to_string(),
             "--prune".to_string(),
             "origin".to_string(),
