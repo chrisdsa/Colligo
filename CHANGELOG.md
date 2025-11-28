@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-11-28
+
+### Added
+
+- More info on progress bar. Now indicate the step being executed, ex: resolving deltas, etc.
+
+### Changed
+
+- Configure repository to filter out blog when using `--light`. This config stays afterward, even for full sync.
+- Trim values when parsing the manifest.
+
+### Fixed
+
+- Add missing --tags arg in git fetch
+- Add missing --progress arg in git fetch
+
 ## [0.5.0] - 2025-11-26
 
 ### Changed
