@@ -268,11 +268,17 @@ async fn process_command(
                 if let Ok(size) = size {
                     // If the line contains progress information, update the progress bar
                     let msg = String::from_utf8_lossy(&read_buffer[..size]).to_string();
+
+                    // Capture info on what is being done
+                    let info = msg.split(":").next().unwrap_or("").trim().to_string();
+
+                    // Capture progress percentage and update progress bar
                     if let Some(cap) = re.captures(&msg) {
                         if let Some(match_) = cap.get(1) {
                             if let Ok(progress) = match_.as_str().parse::<u64>() {
                                 if let Some(pb) = pb {
                                     pb.set_position(progress);
+                                    pb.set_message(format!("{} {}", message[START_INDEX].clone(), info));
                                 }
                             }
                         }

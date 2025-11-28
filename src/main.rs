@@ -60,11 +60,7 @@ async fn main() {
         .long(LIGHT)
         .action(ArgAction::SetTrue)
         .default_value("false")
-        .help(
-            "Download all projects without history. \
-        This option is useful for CI and build servers. \
-        All revision MUST point to a branch or a tag, commit ID are not supported.",
-        );
+        .help("Download all projects without history. Useful for CI and build servers.");
 
     // Quiet option
     let quiet = Arg::new(QUIET)
