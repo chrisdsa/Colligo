@@ -473,7 +473,6 @@ async fn get_fetch_args(
             "--progress".to_string(),
             "--tags".to_string(),
             "--prune".to_string(),
-            "--refetch".to_string(),
             "origin".to_string(),
         ])
     }
