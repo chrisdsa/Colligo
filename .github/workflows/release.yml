@@ -12,7 +12,7 @@ jobs:
   create_linux_executable:
     runs-on: ubuntu-latest
     container:
-      image: rust:latest
+      image: rust:bookworm
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +36,7 @@ jobs:
   create_windows_executable:
     runs-on: ubuntu-latest
     container:
-      image: rust:latest
+      image: rust:bookworm
     steps:
       - uses: actions/checkout@v4
 
