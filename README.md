@@ -3,6 +3,10 @@
 Manage the project's source dependencies by having an XML file describing where to clone / update git repositories to a
 specific revision / branch / commit.
 
+## Requirements
+
+Colligo requires **Git 2.36 or later** to be installed on the system.
+
 ## Usage
 
 ### Create a manifest
