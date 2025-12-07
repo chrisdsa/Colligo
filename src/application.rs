@@ -492,19 +492,24 @@ pub fn assert_dependencies() -> Result<(), ManifestError> {
 fn prepare_file_destination(dest: &PathBuf) -> Result<(), ManifestError> {
     // Delete destination if it exists
     if dest.exists() {
-        let res = fs::remove_file(dest);
-        match res {
-            Ok(_) => {}
-            Err(_) => {
-                let msg = format!("Failed to remove file {}", dest.display());
-                return Err(ManifestError::FailedToExecuteAction(msg));
-            }
+        let res = if dest.is_dir() {
+            fs::remove_dir_all(dest)
+        } else {
+            fs::remove_file(dest)
+        };
+
+        if let Err(_) = res {
+            let msg = format!("Failed to remove destination {}", dest.display());
+            return Err(ManifestError::FailedToExecuteAction(msg));
         }
     }
 
     // Create folder is needed
     let parent = dest.parent().unwrap_or("./".as_ref());
-    let _ = fs::create_dir_all(parent);
+    if let Err(e) = fs::create_dir_all(parent) {
+        let msg = format!("Failed to create parent directory {}: {}", parent.display(), e);
+        return Err(ManifestError::FailedToExecuteAction(msg));
+    }
 
     Ok(())
 }
