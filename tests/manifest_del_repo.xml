@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <manifest>
     <!-- Project's dependencies -->
-    <default revision="main" uri="gitlab.com"/>
+    <default revision="main" uri="github.com"/>
 
     <!-- A Section -->
     <!-- path is relative to the manifest file -->
-    <project name="cdsa_rust/colligo" path="./dev" revision="dev"/>
-    <project name="cdsa_rust/colligo" path="release/v0" revision="v0.0.0"/>
+    <project name="chrisdsa/colligo" path="./dev" revision="dev"/>
+    <project name="chrisdsa/colligo" path="release/v0" revision="v0.0.0"/>
 
     <!-- B Section -->
     <!-- src path is relative to the manifest file -->
     <!-- dest path is relative to the project path -->
-    <project uri="gitlab.com" name="cdsa_rust/colligo" path="./no_revision" revision="dev">
+    <project uri="github.com" name="chrisdsa/colligo" path="./no_revision" revision="dev">
         <delete_project/>
         <copyfile src="./README.md" dest="./new_folder/ln_README.md"/>
         <delete_project/>
