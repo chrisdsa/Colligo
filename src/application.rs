@@ -278,7 +278,7 @@ impl ManifestInstance {
         let mut errors: Vec<String> = Vec::new();
         while let Some(error) = rx.recv().await {
             if let Err(e) = error {
-                errors.push(format!("{}", e))
+                errors.push(format!("{e}"))
             }
         }
 
@@ -330,24 +330,16 @@ impl ManifestInstance {
 }
 
 pub fn generate_default_manifest(destination: &String) -> Result<(), ManifestError> {
-    let file = File::create(destination);
+    let mut file = File::create(destination).map_err(|e| {
+        let msg = format!("Failed to create manifest file {destination}: {e}");
+        ManifestError::FailedToGenerateDefaultManifest(msg)
+    })?;
 
-    match file {
-        Ok(_) => {}
-        Err(_) => {
-            let msg = format!("Failed to create manifest file {destination}");
-            return Err(ManifestError::FailedToGenerateDefaultManifest(msg));
-        }
-    }
-
-    let res = file.unwrap().write_all(DEFAULT_MANIFEST_FILE.as_bytes());
-    match res {
-        Ok(_) => {}
-        Err(_) => {
-            let msg = format!("Failed to write to manifest file {destination}");
-            return Err(ManifestError::FailedToGenerateDefaultManifest(msg));
-        }
-    }
+    file.write_all(DEFAULT_MANIFEST_FILE.as_bytes())
+        .map_err(|e| {
+            let msg = format!("Failed to write to manifest file {destination}: {e}");
+            ManifestError::FailedToGenerateDefaultManifest(msg)
+        })?;
     Ok(())
 }
 
@@ -358,11 +350,7 @@ fn read_manifest<P: AsRef<Path>>(filename: P) -> Result<String, ManifestError> {
         ));
     }
 
-    let file = fs::read_to_string(filename);
-    match file {
-        Ok(file) => Ok(file),
-        Err(e) => Err(ManifestError::FailedToReadManifest(e.to_string())),
-    }
+    fs::read_to_string(filename).map_err(|e| ManifestError::FailedToReadManifest(e.to_string()))
 }
 
 // Ok to clone if the directory does not exist or is empty.
@@ -397,63 +385,47 @@ fn execute_actions(manifest_dir: &Path, project: &Project) -> Result<(), Manifes
                 let relative_src = get_relative_path_for_symlink(&src, &dest);
                 prepare_file_destination(&dest)?;
 
-                let res = symlink(&relative_src, &dest);
-                match res {
-                    Ok(_) => {}
-                    Err(_) => {
-                        let msg = format!(
-                            "Failed to create symlink {} to {}",
-                            src.to_string_lossy(),
-                            dest.to_string_lossy()
-                        );
-                        return Err(ManifestError::FailedToExecuteAction(msg));
-                    }
-                }
+                symlink(&relative_src, &dest).map_err(|e| {
+                    let msg = format!(
+                        "Failed to create symlink {} to {}: {e}",
+                        src.display(),
+                        dest.display()
+                    );
+                    ManifestError::FailedToExecuteAction(msg)
+                })?;
             }
             ProjectAction::FileAction(ProjectFileAction::CopyFile(src, dest)) => {
                 let src = Path::new(manifest_dir).join(project.get_path()).join(src);
                 let dest = Path::new(manifest_dir).join(dest);
                 prepare_file_destination(&dest)?;
-                let res = fs::copy(&src, &dest);
-                match res {
-                    Ok(_) => {}
-                    Err(_) => {
-                        let msg = format!(
-                            "Failed to copy file {} to {}",
-                            src.to_string_lossy(),
-                            dest.to_string_lossy()
-                        );
-                        return Err(ManifestError::FailedToExecuteAction(msg));
-                    }
-                }
+                fs::copy(&src, &dest).map_err(|e| {
+                    let msg = format!(
+                        "Failed to copy file {} to {}: {e}",
+                        src.display(),
+                        dest.display()
+                    );
+                     ManifestError::FailedToExecuteAction(msg)
+                })?;
             }
             ProjectAction::FileAction(ProjectFileAction::CopyDir(src, dest)) => {
                 let src = Path::new(manifest_dir).join(project.get_path()).join(src);
                 let dest = Path::new(manifest_dir).join(dest);
                 prepare_file_destination(&dest)?;
-                let res = copy_directory(&src, &dest);
-                match res {
-                    Ok(_) => {}
-                    Err(_) => {
-                        let msg = format!(
-                            "Failed to copy directory {} to {}",
-                            src.to_string_lossy(),
-                            dest.to_string_lossy()
-                        );
-                        return Err(ManifestError::FailedToExecuteAction(msg));
-                    }
-                }
+                copy_directory(&src, &dest).map_err(|e| {
+                    let msg = format!(
+                        "Failed to copy directory {} to {}: {e}",
+                        src.display(),
+                        dest.display()
+                    );
+                    ManifestError::FailedToExecuteAction(msg)
+                })?;
             }
             ProjectAction::DeleteProject => {
                 let dest = Path::new(manifest_dir).join(project.get_path());
-                let res = fs::remove_dir_all(&dest);
-                match res {
-                    Ok(_) => {}
-                    Err(_) => {
-                        let msg = format!("Failed to remove directory {}", dest.to_string_lossy());
-                        return Err(ManifestError::FailedToExecuteAction(msg));
-                    }
-                }
+                fs::remove_dir_all(&dest).map_err(|e| {
+                    let msg = format!("Failed to remove directory {}: {e}", dest.display());
+                    ManifestError::FailedToExecuteAction(msg)
+                })?;
             }
         }
     }
@@ -461,32 +433,24 @@ fn execute_actions(manifest_dir: &Path, project: &Project) -> Result<(), Manifes
 }
 
 pub fn save_file(filename: &String, content: &String) -> Result<(), ManifestError> {
-    let mut file = match File::create(filename) {
-        Ok(value) => value,
-        Err(_) => {
-            let msg = format!("Failed to create file {}", filename);
-            return Err(ManifestError::FailedToSaveFile(msg));
-        }
-    };
+    let mut file = File::create(filename).map_err(|e|{
+            let msg = format!("Failed to create file {filename}: {e}");
+            ManifestError::FailedToSaveFile(msg)
+        })?;
 
-    let res = file.write(content.as_bytes());
-    match res {
-        Ok(_) => {}
-        Err(_) => {
-            let msg = format!("Failed to write to file {filename}");
-            return Err(ManifestError::FailedToSaveFile(msg));
-        }
-    }
+    file.write(content.as_bytes()).map_err(|e| {
+        let msg = format!("Failed to write to file {filename}: {e}");
+        ManifestError::FailedToSaveFile(msg)
+    })?;
     Ok(())
 }
 
 pub fn assert_dependencies() -> Result<(), ManifestError> {
-    let output = Command::new("git").arg("--version").output();
-
-    match output {
-        Ok(_) => Ok(()),
-        Err(_) => Err(ManifestError::MissingDependency("git".to_string())),
-    }
+    const GIT: &str = "git";
+    Command::new(GIT).arg("--version").output().map_err(|_| {
+        ManifestError::MissingDependency(GIT.to_string())
+    })?;
+    Ok(())
 }
 
 fn prepare_file_destination(dest: &PathBuf) -> Result<(), ManifestError> {
@@ -530,7 +494,13 @@ fn prepare_file_destination(dest: &PathBuf) -> Result<(), ManifestError> {
 
     // Create parent folder if needed
     let parent = dest.parent().unwrap_or("./".as_ref());
-    let _ = fs::create_dir_all(parent);
+    if let Err(e) = fs::create_dir_all(parent) {
+        let msg = format!(
+            "Failed to create parent directory {}: {e}",
+            parent.display(),
+        );
+        return Err(ManifestError::FailedToExecuteAction(msg));
+    }
 
     Ok(())
 }
@@ -609,7 +579,7 @@ pub async fn get_projects_status(manifest: &ManifestInstance, workdir: &Path) ->
         let repo_abs_path = manifest_dir_path.join(project.get_path());
         let rel_path = pathdiff::diff_paths(repo_abs_path, workdir)
             .unwrap_or("./".into())
-            .to_string_lossy()
+            .display()
             .to_string();
 
         project_status.push(ProjectStatus {
