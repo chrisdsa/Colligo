@@ -132,7 +132,11 @@ mod test_application {
             .expect("Failed to create file");
         std::fs::File::create(temp_dir.path().join("cp_README.md")).expect("Failed to create file");
         // create symlink to a directory
-        std::os::unix::fs::symlink(&project_0_path, temp_dir.path().join("./new_folder/src_linked")).expect("failed to create symlink");
+        std::os::unix::fs::symlink(
+            &project_0_path,
+            temp_dir.path().join("./new_folder/src_linked"),
+        )
+        .expect("failed to create symlink");
 
         // Test
         let mut manifest =
