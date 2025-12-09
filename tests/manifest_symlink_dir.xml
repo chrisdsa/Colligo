@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<manifest>
+    <!-- Project's dependencies -->
+    <default revision="main" uri="github.com"/>
+
+    <!-- A Section -->
+    <!-- path is relative to the manifest file -->
+    <project name="chrisdsa/colligo" path="./dev" revision="dev"/>
+    <project name="chrisdsa/colligo" path="release/v0" revision="v0.0.0"/>
+
+    <!-- B Section -->
+    <!-- src path is relative to the project path -->
+    <!-- dest path is relative to the manifest file -->
+    <project uri="github.com" name="chrisdsa/colligo" path="./no_revision">
+        <linkfile src="./README.md" dest="./new_folder/ln_README.md"/>
+        <linkfile src="./src" dest="./new_folder/src_linked"/>
+        <copyfile src="./README.md" dest="./cp_README.md"/>
+    </project>
+
+</manifest>
