@@ -490,19 +490,45 @@ pub fn assert_dependencies() -> Result<(), ManifestError> {
 }
 
 fn prepare_file_destination(dest: &PathBuf) -> Result<(), ManifestError> {
-    // Delete destination if it exists
-    if dest.exists() {
-        let res = fs::remove_file(dest);
-        match res {
-            Ok(_) => {}
-            Err(_) => {
-                let msg = format!("Failed to remove file {}", dest.display());
-                return Err(ManifestError::FailedToExecuteAction(msg));
+    // Inspect without following symlinks
+    match fs::symlink_metadata(dest) {
+        Ok(meta) => {
+            let ft = meta.file_type();
+            if ft.is_symlink() {
+                fs::remove_file(dest).map_err(|e| {
+                    ManifestError::FailedToExecuteAction(format!(
+                        "Failed to remove symlink {}: {e}",
+                        dest.display()
+                    ))
+                })?;
+            } else if ft.is_dir() {
+                fs::remove_dir_all(dest).map_err(|e| {
+                    ManifestError::FailedToExecuteAction(format!(
+                        "Failed to remove directory {}: {e}",
+                        dest.display()
+                    ))
+                })?;
+            } else {
+                fs::remove_file(dest).map_err(|e| {
+                    ManifestError::FailedToExecuteAction(format!(
+                        "Failed to remove file {}: {e}",
+                        dest.display()
+                    ))
+                })?;
+            }
+        }
+        Err(e) => {
+            // If the path doesn't exist, that's fine; otherwise return error.
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(ManifestError::FailedToExecuteAction(format!(
+                    "Failed to stat {}: {e}",
+                    dest.display()
+                )));
             }
         }
     }
 
-    // Create folder is needed
+    // Create parent folder if needed
     let parent = dest.parent().unwrap_or("./".as_ref());
     let _ = fs::create_dir_all(parent);
 

@@ -409,4 +409,35 @@ mod test_application {
                 .expect("copydir failed"),
         );
     }
+
+    #[tokio::test]
+    async fn sync_with_copydir_action_file_and_dir_exists() {
+        // Setup: Sync project
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_copydir.xml";
+        let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
+        let manifest = temp_dir.path().join("manifest_example.xml");
+        std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
+
+        // Create destination file and directory before syncing
+        let dest_path = temp_dir.path().join("./new_dev/test");
+        std::fs::create_dir_all(dest_path).expect("failed to create dest dir");
+
+        let mut manifest =
+            ManifestInstance::try_from(manifest).expect("Failed to create manifest instance");
+
+        manifest.parse().expect("Unable to parse manifest");
+
+        manifest
+            .sync(&DwlMode::HTTPS, false, false, false)
+            .await
+            .expect("Unable to sync manifest");
+
+        // Assert copydir action
+        assert_eq!(
+            std::fs::read_to_string(temp_dir.path().join("dev/folder/src/version.rs"))
+                .expect("Unable to read src/version.rs"),
+            std::fs::read_to_string(temp_dir.path().join("new_dev/src/version.rs"))
+                .expect("copydir failed"),
+        );
+    }
 }
