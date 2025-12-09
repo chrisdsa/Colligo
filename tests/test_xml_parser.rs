@@ -13,8 +13,8 @@ mod test_xml_parser {
         let file = std::fs::read_to_string(MANIFEST_PATH).expect("Unable to read file");
         let manifest = parser.parse(&file).expect("Unable to parse XML");
 
-        const PROJECT_URI_SSH: &str = "git@gitlab.com:cdsa_rust/colligo.git";
-        const PROJECT_URI_HTTPS: &str = "https://gitlab.com/cdsa_rust/colligo.git";
+        const PROJECT_URI_SSH: &str = "git@github.com:chrisdsa/colligo.git";
+        const PROJECT_URI_HTTPS: &str = "https://github.com/chrisdsa/colligo.git";
         const PROJECT_0_PATH: &str = "./dev";
         const PROJECT_1_PATH: &str = "release/v0";
         const PROJECT_2_PATH: &str = "./no_revision";

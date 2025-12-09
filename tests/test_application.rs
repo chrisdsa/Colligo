@@ -107,7 +107,7 @@ mod test_application {
     #[tokio::test]
     async fn sync_project_on_old_commit() {
         // Setup
-        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_example.xml";
+        const ORIGINAL_MANIFEST_PATH: &str = "./tests/manifest_symlink_dir.xml";
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
         let manifest = temp_dir.path().join("manifest.xml");
         std::fs::copy(ORIGINAL_MANIFEST_PATH, &manifest).unwrap();
@@ -131,6 +131,8 @@ mod test_application {
         std::fs::File::create(temp_dir.path().join("new_folder/ln_README.md"))
             .expect("Failed to create file");
         std::fs::File::create(temp_dir.path().join("cp_README.md")).expect("Failed to create file");
+        // create symlink to a directory
+        std::os::unix::fs::symlink(&project_0_path, temp_dir.path().join("./new_folder/src_linked")).expect("failed to create symlink");
 
         // Test
         let mut manifest =
@@ -214,11 +216,11 @@ mod test_application {
             .output();
         let _ = std::process::Command::new("git")
             .current_dir(&project_1_path)
-            .args(["checkout", "v0.0.0", "--quiet"])
+            .args(["checkout", "v0.1.0", "--quiet"])
             .output();
         let _ = std::process::Command::new("git")
             .current_dir(&project_2_path)
-            .args(["checkout", "v0.0.0", "--quiet"])
+            .args(["checkout", "v0.1.1", "--quiet"])
             .output();
 
         // Test
@@ -230,10 +232,12 @@ mod test_application {
         let pinned = manifest.pin().await.expect("Unable to pin manifest");
 
         // Assert
-        const COMMIT_V0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
-        assert_eq!(pinned.get_projects()[0].get_revision(), COMMIT_V0);
-        assert_eq!(pinned.get_projects()[1].get_revision(), COMMIT_V0);
-        assert_eq!(pinned.get_projects()[2].get_revision(), COMMIT_V0);
+        const COMMIT_V0_0_0: &str = "565b113e57b2c67dcaa3e7c2b5040cf4715221df";
+        const COMMIT_V0_1_0: &str = "633fcde4a51809adfffa2d65d68a3ac687d93826";
+        const COMMIT_V0_1_1: &str = "61518393fd65f7bf57be144f4498112d5c503d36";
+        assert_eq!(pinned.get_projects()[0].get_revision(), COMMIT_V0_0_0);
+        assert_eq!(pinned.get_projects()[1].get_revision(), COMMIT_V0_1_0);
+        assert_eq!(pinned.get_projects()[2].get_revision(), COMMIT_V0_1_1);
     }
 
     #[tokio::test]

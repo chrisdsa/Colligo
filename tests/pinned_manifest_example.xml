@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-    <project uri="gitlab.com" name="cdsa_rust/colligo" path="./dev" revision="565b113e57b2c67dcaa3e7c2b5040cf4715221df"/>
-    <project uri="gitlab.com" name="cdsa_rust/colligo" path="release/v0" revision="565b113e57b2c67dcaa3e7c2b5040cf4715221df"/>
-    <project uri="gitlab.com" name="cdsa_rust/colligo" path="./no_revision" revision="565b113e57b2c67dcaa3e7c2b5040cf4715221df">
+    <project uri="github.com" name="chrisdsa/colligo" path="./dev" revision="565b113e57b2c67dcaa3e7c2b5040cf4715221df"/>
+    <project uri="github.com" name="chrisdsa/colligo" path="release/v0" revision="633fcde4a51809adfffa2d65d68a3ac687d93826"/>
+    <project uri="github.com" name="chrisdsa/colligo" path="./no_revision" revision="61518393fd65f7bf57be144f4498112d5c503d36">
         <linkfile src="./README.md" dest="./ln_README.md"/>
         <copyfile src="./README.md" dest="./cp_README.md"/>
     </project>

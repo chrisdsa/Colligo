@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <manifest>
     <!-- Project's default settings -->
-    <default revision="main" uri="gitlab.com"/>
+    <default revision="main" uri="github.com"/>
 
     <!-- path is relative from where manifest is executed -->
     <project name="repo/name" path="path/folder" revision="branch"/>

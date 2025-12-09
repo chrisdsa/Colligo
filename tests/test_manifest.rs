@@ -23,7 +23,7 @@ mod test_xml {
         assert_eq!(revision, Some("main"));
 
         let uri = default.attribute("uri");
-        assert_eq!(uri, Some("gitlab.com"));
+        assert_eq!(uri, Some("github.com"));
 
         // Projects
         let project_cnt = manifest
