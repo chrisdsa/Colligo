@@ -387,7 +387,7 @@ fn execute_actions(manifest_dir: &Path, project: &Project) -> Result<(), Manifes
                         src.display(),
                         dest.display()
                     );
-                     ManifestError::FailedToExecuteAction(msg)
+                    ManifestError::FailedToExecuteAction(msg)
                 })?;
             }
             ProjectAction::FileAction(ProjectFileAction::CopyDir(src, dest)) => {
@@ -416,10 +416,10 @@ fn execute_actions(manifest_dir: &Path, project: &Project) -> Result<(), Manifes
 }
 
 pub fn save_file(filename: &String, content: &String) -> Result<(), ManifestError> {
-    let mut file = File::create(filename).map_err(|e|{
-            let msg = format!("Failed to create file {filename}: {e}");
-            ManifestError::FailedToSaveFile(msg)
-        })?;
+    let mut file = File::create(filename).map_err(|e| {
+        let msg = format!("Failed to create file {filename}: {e}");
+        ManifestError::FailedToSaveFile(msg)
+    })?;
 
     file.write(content.as_bytes()).map_err(|e| {
         let msg = format!("Failed to write to file {filename}: {e}");
@@ -430,9 +430,10 @@ pub fn save_file(filename: &String, content: &String) -> Result<(), ManifestErro
 
 pub fn assert_dependencies() -> Result<(), ManifestError> {
     const GIT: &str = "git";
-    Command::new(GIT).arg("--version").output().map_err(|_| {
-        ManifestError::MissingDependency(GIT.to_string())
-    })?;
+    Command::new(GIT)
+        .arg("--version")
+        .output()
+        .map_err(|_| ManifestError::MissingDependency(GIT.to_string()))?;
     Ok(())
 }
 
