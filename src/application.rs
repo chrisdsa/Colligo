@@ -243,14 +243,12 @@ impl ManifestInstance {
             let mode = mode.clone();
 
             let handle = tokio::task::spawn(async move {
-                let mut result = Ok(());
+                let mut result;
 
                 let vcs = GitVersionControl::new();
 
-                if is_ok_to_clone(&dir, project.get_path()) {
-                    result = vcs.init(&dir, &project, &mode).await;
-                    send_result(&tx, result.clone()).await;
-                }
+                result = vcs.init(&dir, &project, &mode).await;
+                send_result(&tx, result.clone()).await;
 
                 if result.is_ok() {
                     result = vcs
@@ -351,21 +349,6 @@ fn read_manifest<P: AsRef<Path>>(filename: P) -> Result<String, ManifestError> {
     }
 
     fs::read_to_string(filename).map_err(|e| ManifestError::FailedToReadManifest(e.to_string()))
-}
-
-// Ok to clone if the directory does not exist or is empty.
-fn is_ok_to_clone(manifest_dir: &Path, path: &String) -> bool {
-    let dir = manifest_dir.join(path);
-
-    if dir.exists() && dir.is_dir() {
-        let res = dir.read_dir();
-        match res {
-            Ok(value) => value.count() == 0,
-            Err(_) => true,
-        }
-    } else {
-        true
-    }
 }
 
 async fn send_result(sender: &Sender<Result<(), ManifestError>>, code: Result<(), ManifestError>) {
